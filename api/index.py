@@ -11,3 +11,4 @@ from app import app
 
 # Vercel이 감지하는 WSGI 애플리케이션 핸들러
 app = app
+handler = app

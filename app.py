@@ -16,7 +16,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, "templates"),
+    static_folder=os.path.join(BASE_DIR, "static")
+)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "default-dev-secret-key")
 # 업로드 용량 제한 (최대 16MB)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
