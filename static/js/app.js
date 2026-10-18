@@ -276,15 +276,44 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // -------------------------------------------------------------------------
-    // 3. 결과 렌더링 및 객관식 포맷 최적화 함수
+    // 3. 결과 렌더링 및 객관식/보기 박스 포맷 최적화 함수
     // -------------------------------------------------------------------------
     function formatQuizMarkdown(text) {
         if (!text) return "";
-        // 1. 객관식 보기 번호(①~⑤)가 줄 중간에 붙어 있는 경우 강제로 줄바꿈 삽입
-        let formatted = text.replace(/([^\n])\s*([①②③④⑤])/g, "$1\n\n$2");
-        // 2. 1), 2) 등 괄호형 번호가 줄 중간에 있는 경우도 줄바꿈 삽입
+
+        // 1. 코드 블록(```)으로 감싸진 <보기>, [보기], <예시>, [예시]를 quiz-passage-box로 변환 (폰트 깨짐 및 글씨 잘림 방지)
+        let formatted = text.replace(/```(?:text|markdown)?\s*([<\[]?(?:보기|예시|지문|사례)[>\]]?[\s\S]*?)```/gi, (match, p1) => {
+            return `<div class="quiz-passage-box">\n${p1.trim()}\n</div>`;
+        });
+
+        // 2. HTML 태그 형태 <보기>...</보기>, <예시>...</예시>를 quiz-passage-box로 변환
+        formatted = formatted.replace(/<보기>([\s\S]*?)<\/보기>/gi, (match, p1) => {
+            return `<div class="quiz-passage-box"><b>&lt;보기&gt;</b>\n${p1.trim()}</div>`;
+        });
+        formatted = formatted.replace(/<예시>([\s\S]*?)<\/예시>/gi, (match, p1) => {
+            return `<div class="quiz-passage-box"><b>&lt;예시&gt;</b>\n${p1.trim()}</div>`;
+        });
+
+        // 3. 단독 <보기>, <예시> 태그가 브라우저에 의해 무시되거나 잘리지 않도록 안전 변환
+        formatted = formatted.replace(/<보기>/gi, '<div class="quiz-passage-box"><b>&lt;보기&gt;</b>\n');
+        formatted = formatted.replace(/<\/보기>/gi, '</div>');
+        formatted = formatted.replace(/<예시>/gi, '<div class="quiz-passage-box"><b>&lt;예시&gt;</b>\n');
+        formatted = formatted.replace(/<\/예시>/gi, '</div>');
+
+        // 4. 객관식 보기 번호(①~⑤)가 줄 중간에 붙어 있는 경우 강제로 줄바꿈 삽입
+        formatted = formatted.replace(/([^\n])\s*([①②③④⑤])/g, "$1\n\n$2");
+        // 5. 1), 2) 등 괄호형 번호가 줄 중간에 있는 경우도 줄바꿈 삽입
         formatted = formatted.replace(/([^\n])\s*(\([1-5]\)|[1-5]\))\s+/g, "$1\n\n$2 ");
+
         return formatted;
+    }
+
+    function beautifyQuizPassages(container) {
+        if (!container) return;
+        // pre, blockquote 태그가 있으면 글씨체 깨짐 방지 및 가로 스크롤 잘림 방지 클래스 적용
+        container.querySelectorAll("pre, blockquote").forEach((el) => {
+            el.classList.add("quiz-passage-box");
+        });
     }
 
     function beautifyQuizOptions(container) {
@@ -340,7 +369,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // 정답 및 해설을 분리하지 않고 빨간 형광펜으로 정답을 칠한 통합 해설 박스로 구성
+    // 정답 및 해설: 모든 문항(보기) 해설을 제공하되, 정답인 번호와 해설에 함께 반투명형광레드 마킹
     function beautifyQuizExplanations(container) {
         if (!container) return;
         const detailsList = container.querySelectorAll("details");
@@ -355,17 +384,49 @@ document.addEventListener("DOMContentLoaded", () => {
             const innerHtml = clone.innerHTML.trim();
             const innerText = clone.textContent.trim();
 
-            // 이미 mark 태그가 있으면 클래스 보장 후 래핑
+            // 1. 이미 mark 태그로 정답 번호와 해설이 감싸져 있는 경우
             if (innerHtml.includes("highlight-answer") || innerHtml.includes("<mark")) {
                 let processedHtml = innerHtml.replace(/<mark(?!\s+class)/gi, '<mark class="highlight-answer"');
-                details.innerHTML = `${summaryHtml}<div class="explanation-box"><p class="explanation-text">${processedHtml}</p></div>`;
+                details.innerHTML = `${summaryHtml}<div class="explanation-box">${processedHtml}</div>`;
                 return;
             }
 
-            // 분리된 정답/해설 포맷인 경우 하나의 문단으로 통합하고 정답에 빨간 형광펜 칠하기
+            // 2. 정답 번호 탐색 (예: "정답: ③" 또는 "③" 또는 "3번")
+            let correctNum = "";
+            const numMatch = innerText.match(/(?:정답|답안)\s*[:：]?\s*([①②③④⑤]|\([1-5]\)|[1-5]번|[1-5])/i);
+            if (numMatch) {
+                correctNum = numMatch[1].replace(/번$/, "").trim();
+            }
+
+            // 3. 줄 단위로 나누어 보기별 해설 처리 (정답인 번호와 해설에 함께 반투명 형광레드 적용)
+            const rawLines = innerHtml.split(/<br\s*\/?>|\n/i).map(l => l.trim()).filter(Boolean);
+            if (rawLines.length > 1 && correctNum) {
+                const formattedLines = rawLines.map((line) => {
+                    const plainLine = line.replace(/<[^>]+>/g, "").trim();
+                    const isCorrectLine = (
+                        plainLine.startsWith(correctNum) ||
+                        (correctNum === "3" && plainLine.startsWith("③")) ||
+                        (correctNum === "1" && plainLine.startsWith("①")) ||
+                        (correctNum === "2" && plainLine.startsWith("②")) ||
+                        (correctNum === "4" && plainLine.startsWith("④")) ||
+                        (correctNum === "5" && plainLine.startsWith("⑤")) ||
+                        (correctNum === "③" && plainLine.startsWith("3")) ||
+                        plainLine.includes("정답")
+                    );
+
+                    if (isCorrectLine && !line.includes("highlight-answer")) {
+                        return `<div class="explanation-item"><mark class="highlight-answer">${line}</mark></div>`;
+                    }
+                    return `<div class="explanation-item">${line}</div>`;
+                });
+
+                details.innerHTML = `${summaryHtml}<div class="explanation-box">${formattedLines.join("")}</div>`;
+                return;
+            }
+
+            // 4. 단일 문단인 경우
             let answer = "";
             let explanation = "";
-
             const ansMatch = innerText.match(/(?:정답|답안)\s*[:：]\s*([^\n\r]+)/i);
             if (ansMatch) {
                 answer = ansMatch[1].replace(/^[*-•\s]+/, "").trim();
@@ -380,13 +441,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 explanation = innerText;
             }
 
-            const markBadge = answer ? `<mark class="highlight-answer">정답: ${escapeHtml(answer)}</mark> ` : "";
-            const cleanExp = escapeHtml(explanation);
+            const markBadge = answer ? `<mark class="highlight-answer">정답: ${escapeHtml(answer)} - ${escapeHtml(explanation)}</mark>` : escapeHtml(explanation);
 
             details.innerHTML = `
                 ${summaryHtml}
                 <div class="explanation-box">
-                    <p class="explanation-text">${markBadge}${cleanExp}</p>
+                    <p class="explanation-text">${markBadge}</p>
                 </div>
             `;
         });
@@ -492,6 +552,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // marked.js 라이브러리를 통해 Markdown을 HTML로 파싱
         if (window.marked && typeof window.marked.parse === "function") {
             quizResult.innerHTML = window.marked.parse(formattedMarkdown);
+            beautifyQuizPassages(quizResult);
             beautifyQuizOptions(quizResult);
             beautifyQuizExplanations(quizResult);
         } else {
@@ -601,6 +662,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const tempDiv = document.createElement("div");
         if (window.marked && typeof window.marked.parse === "function") {
             tempDiv.innerHTML = window.marked.parse(formattedMarkdown);
+            beautifyQuizPassages(tempDiv);
             beautifyQuizOptions(tempDiv);
         } else {
             tempDiv.innerHTML = `<p>${escapeHtml(currentMarkdownText)}</p>`;

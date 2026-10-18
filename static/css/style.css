@@ -641,40 +641,84 @@ body {
     color: var(--primary-hover);
 }
 
+/* <보기>, <예시>, 지문 박스 전용 스타일 (폰트 변경 방지, 글씨 잘림 방지, 박스 안 자동 줄바꿈) */
+.quiz-passage-box,
+.quiz-result-content blockquote,
+.quiz-result-content pre {
+    background-color: #f8fafc !important;
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    padding: 14px 18px !important;
+    margin: 14px 0 16px 0 !important;
+    font-family: inherit !important; /* 글씨체가 달라지지 않도록 기본 폰트 유지 */
+    font-size: 14.5px !important;
+    line-height: 1.75 !important;
+    color: #1e293b !important;
+    white-space: pre-wrap !important; /* 글씨가 잘리지 않고 자동 줄바꿈되어 다 읽을 수 있게 보장 */
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+.quiz-result-content pre code,
+.quiz-passage-box code {
+    font-family: inherit !important;
+    white-space: pre-wrap !important;
+    font-size: inherit !important;
+    background: transparent !important;
+    padding: 0 !important;
+    color: inherit !important;
+    border: none !important;
+}
+
 /* 정답 및 해설 통합 박스 */
 .explanation-box {
     margin-top: 10px;
-    padding: 12px 14px;
+    padding: 14px 16px;
     background-color: #ffffff;
-    border-radius: 6px;
+    border-radius: 8px;
     border: 1px solid #e2e8f0;
-    line-height: 1.75;
+    line-height: 1.85;
     font-size: 14.5px;
     color: #334155;
     word-break: break-word;
     overflow-wrap: break-word;
 }
 
-.explanation-text {
-    margin-bottom: 0 !important;
+.explanation-box p,
+.explanation-box div {
+    margin-bottom: 8px;
+    line-height: 1.85;
     word-break: break-word;
     overflow-wrap: break-word;
 }
 
-/* 부드럽고 가독성 높은 빨간색 형광펜 효과 (너무 진하지 않아 글씨가 선명하게 보임) */
+.explanation-box p:last-child,
+.explanation-box div:last-child {
+    margin-bottom: 0;
+}
+
+/* 정답인 번호와 해설에 함께 적용되는 반투명 형광 레드 마킹 효과 (너무 진하지 않아 글씨가 선명하게 보임) */
 .highlight-answer,
+.highlight-answer-full,
 mark.highlight-answer,
 .quiz-result-content mark {
-    background: linear-gradient(to top, rgba(244, 63, 94, 0.22) 80%, transparent 0%);
-    color: #9f1239;
-    font-weight: 700;
-    padding: 2px 7px;
+    background-color: rgba(255, 75, 110, 0.22) !important;
+    background: linear-gradient(to top, rgba(255, 75, 110, 0.22) 100%, transparent 0%) !important;
+    color: #881337 !important; /* 선명한 버건디 톤으로 글씨 시인성 보장 */
+    font-weight: 700 !important;
+    padding: 3px 8px;
     border-radius: 4px;
     display: inline;
-    margin-right: 6px;
-    border-bottom: 2px solid rgba(244, 63, 94, 0.45);
-    text-decoration: none;
-    word-break: keep-all;
+    border-left: 3.5px solid #f43f5e;
+    line-height: 1.8;
+    margin: 2px 0;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
 }
 
 .quiz-result-content hr {
