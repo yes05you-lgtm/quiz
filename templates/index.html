@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>AI Quiz Generator - PDF 기반 맞춤형 퀴즈 생성기</title>
     <!-- 구글 폰트: Pretendard 대체 Noto Sans KR -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -119,8 +119,11 @@
                 <div class="result-header">
                     <h2 class="card-title">생성된 퀴즈</h2>
                     <div class="result-actions" id="result-actions" style="display: none;">
-                        <button type="button" id="copy-btn" class="btn btn-secondary btn-sm" title="클립보드에 복사">
+                        <button type="button" id="copy-btn" class="btn btn-secondary btn-sm" title="클립보드에 전체 복사">
                             📋 결과 복사
+                        </button>
+                        <button type="button" id="copy-answers-btn" class="btn btn-secondary btn-sm" title="문제번호, 문제, 정답, 해설만 복사">
+                            💡 정답·해설 복사
                         </button>
                         <button type="button" id="download-pdf-btn" class="btn btn-secondary btn-sm" title="정답 및 해설이 제외된 시험지 PDF 다운로드">
                             📄 PDF 시험지 다운로드

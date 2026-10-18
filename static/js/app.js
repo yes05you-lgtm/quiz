@@ -25,7 +25,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const quizResult = document.getElementById("quiz-result");
     const resultActions = document.getElementById("result-actions");
     const copyBtn = document.getElementById("copy-btn");
+    const copyAnswersBtn = document.getElementById("copy-answers-btn");
     const downloadPdfBtn = document.getElementById("download-pdf-btn");
+
+    // marked.js 줄바꿈 및 GFM 옵션 활성화 (보기가 한 줄로 뭉쳐 나오는 현상 방지)
+    if (window.marked && typeof window.marked.setOptions === "function") {
+        window.marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+    }
 
     // 최신 생성된 원본 Markdown 텍스트 저장용 변수
     let currentMarkdownText = "";
@@ -267,15 +276,158 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // -------------------------------------------------------------------------
-    // 3. 결과 렌더링 및 상태 제어 함수
+    // 3. 결과 렌더링 및 객관식 포맷 최적화 함수
     // -------------------------------------------------------------------------
+    function formatQuizMarkdown(text) {
+        if (!text) return "";
+        // 1. 객관식 보기 번호(①~⑤)가 줄 중간에 붙어 있는 경우 강제로 줄바꿈 삽입
+        let formatted = text.replace(/([^\n])\s*([①②③④⑤])/g, "$1\n\n$2");
+        // 2. 1), 2) 등 괄호형 번호가 줄 중간에 있는 경우도 줄바꿈 삽입
+        formatted = formatted.replace(/([^\n])\s*(\([1-5]\)|[1-5]\))\s+/g, "$1\n\n$2 ");
+        return formatted;
+    }
+
+    function beautifyQuizOptions(container) {
+        if (!container) return;
+        const paragraphs = container.querySelectorAll("p");
+        paragraphs.forEach((p) => {
+            if (/[①②③④⑤]/.test(p.innerHTML)) {
+                const lines = p.innerHTML.split(/<br\s*\/?>|\n/i);
+                const hasOption = lines.some((line) => /^\s*[①②③④⑤]/.test(line.trim()));
+                if (hasOption) {
+                    const optionsHtml = [];
+                    const leadingTexts = [];
+                    let isOptionStarted = false;
+
+                    lines.forEach((line) => {
+                        const trimmed = line.trim();
+                        const match = trimmed.match(/^([①②③④⑤])\s*(.*)$/);
+                        if (match) {
+                            isOptionStarted = true;
+                            optionsHtml.push(
+                                `<div class="quiz-option-item"><span class="quiz-option-num">${match[1]}</span><span class="quiz-option-text">${match[2]}</span></div>`
+                            );
+                        } else if (!isOptionStarted && trimmed) {
+                            leadingTexts.push(line);
+                        } else if (trimmed) {
+                            if (optionsHtml.length > 0) {
+                                const lastIdx = optionsHtml.length - 1;
+                                optionsHtml[lastIdx] = optionsHtml[lastIdx].replace(
+                                    /<\/div>$/,
+                                    ` ${trimmed}</div>`
+                                );
+                            } else {
+                                leadingTexts.push(line);
+                            }
+                        }
+                    });
+
+                    let replacement = "";
+                    if (leadingTexts.length > 0) {
+                        replacement += `<p>${leadingTexts.join("<br>")}</p>`;
+                    }
+                    if (optionsHtml.length > 0) {
+                        replacement += `<div class="quiz-options-group">${optionsHtml.join("")}</div>`;
+                    }
+
+                    if (replacement) {
+                        const wrapper = document.createElement("div");
+                        wrapper.innerHTML = replacement;
+                        p.parentNode.replaceChild(wrapper, p);
+                    }
+                }
+            }
+        });
+    }
+
+    function extractAnswersOnly(markdown) {
+        if (!markdown) return "";
+
+        const tempDiv = document.createElement("div");
+        if (window.marked && typeof window.marked.parse === "function") {
+            tempDiv.innerHTML = window.marked.parse(markdown);
+        } else {
+            tempDiv.innerHTML = markdown;
+        }
+
+        const items = [];
+        const headers = tempDiv.querySelectorAll("h2, h3, h4");
+
+        if (headers.length > 0) {
+            headers.forEach((h) => {
+                const questionTitle = h.textContent.trim();
+                let nextEl = h.nextElementSibling;
+                let detailsEl = null;
+
+                while (nextEl && !["H2", "H3", "H4"].includes(nextEl.tagName)) {
+                    if (nextEl.tagName === "DETAILS") {
+                        detailsEl = nextEl;
+                        break;
+                    }
+                    nextEl = nextEl.nextElementSibling;
+                }
+
+                let answerText = "";
+                let explanationText = "";
+
+                if (detailsEl) {
+                    const clone = detailsEl.cloneNode(true);
+                    const summary = clone.querySelector("summary");
+                    if (summary) summary.remove();
+
+                    const lines = clone.textContent.split("\n").map((l) => l.trim()).filter(Boolean);
+                    lines.forEach((line) => {
+                        if (line.includes("정답")) {
+                            answerText = line.replace(/^[*-•\s]+/, "");
+                        } else if (line.includes("해설")) {
+                            explanationText = line.replace(/^[*-•\s]+/, "");
+                        } else if (explanationText) {
+                            explanationText += " " + line;
+                        }
+                    });
+                }
+
+                let itemStr = `[${questionTitle}]\n`;
+                if (answerText) itemStr += `- ${answerText}\n`;
+                if (explanationText) itemStr += `- ${explanationText}\n`;
+                items.push(itemStr.trim());
+            });
+        }
+
+        // 폴백 정규식 추출
+        if (items.length === 0) {
+            const questionBlocks = markdown.split(/(?=###?\s*문제\s*\d+)/i);
+            for (const block of questionBlocks) {
+                if (!block.trim()) continue;
+                const matchHeader = block.match(/###?\s*(문제\s*\d+[\.\:]?\s*[^\n]+)/i);
+                const matchAns = block.match(/-\s*\*\*정답\*\*\s*:\s*([^\n]+)/i) || block.match(/정답\s*:\s*([^\n]+)/i);
+                const matchExp = block.match(/-\s*\*\*해설\*\*\s*:\s*([\s\S]*?)(?=<\/details>|---|###|$)/i) || block.match(/해설\s*:\s*([\s\S]*?)(?=<\/details>|---|###|$)/i);
+
+                if (matchHeader) {
+                    let blockStr = `[${matchHeader[1].trim()}]\n`;
+                    if (matchAns) blockStr += `- 정답: ${matchAns[1].trim()}\n`;
+                    if (matchExp) {
+                        const cleanExp = matchExp[1].replace(/<\/?[^>]+(>|$)/g, "").trim();
+                        blockStr += `- 해설: ${cleanExp}\n`;
+                    }
+                    items.push(blockStr.trim());
+                }
+            }
+        }
+
+        return items.join("\n\n");
+    }
+
     function renderQuizResult(markdownText) {
         emptyState.classList.add("hidden");
         loadingState.classList.add("hidden");
 
+        const formattedMarkdown = formatQuizMarkdown(markdownText);
+
         // marked.js 라이브러리를 통해 Markdown을 HTML로 파싱
         if (window.marked && typeof window.marked.parse === "function") {
-            quizResult.innerHTML = window.marked.parse(markdownText);
+            quizResult.innerHTML = window.marked.parse(formattedMarkdown);
+            beautifyQuizOptions(quizResult);
         } else {
             // fallback: 일반 텍스트 보존 표시
             quizResult.innerHTML = `<pre style="white-space: pre-wrap;">${escapeHtml(markdownText)}</pre>`;
@@ -284,9 +436,9 @@ document.addEventListener("DOMContentLoaded", () => {
         quizResult.classList.remove("hidden");
         resultActions.style.display = "flex";
 
-        // 모바일 사용자를 위해 결과창으로 부드럽게 스크롤
+        // 모바일 사용자를 위해 결과창으로 부드럽게 스크롤 (화면 레이아웃 변경 방지)
         if (window.innerWidth <= 900) {
-            document.getElementById("result-section").scrollIntoView({ behavior: "smooth" });
+            document.getElementById("result-section").scrollIntoView({ behavior: "smooth", block: "start" });
         }
     }
 
@@ -327,7 +479,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // -------------------------------------------------------------------------
-    // 4. 결과 복사 및 Markdown 다운로드 기능
+    // 4. 결과 복사, 정답·해설 복사 및 Markdown 다운로드 기능
     // -------------------------------------------------------------------------
     copyBtn.addEventListener("click", async () => {
         if (!currentMarkdownText) return;
@@ -335,7 +487,7 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             await navigator.clipboard.writeText(currentMarkdownText);
             const originalText = copyBtn.innerHTML;
-            copyBtn.innerHTML = "✅ 복사 완료!";
+            copyBtn.innerHTML = "✅ 결과 복사 완료!";
             copyBtn.disabled = true;
 
             setTimeout(() => {
@@ -348,13 +500,42 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    if (copyAnswersBtn) {
+        copyAnswersBtn.addEventListener("click", async () => {
+            if (!currentMarkdownText) return;
+
+            const answersOnlyText = extractAnswersOnly(currentMarkdownText);
+            if (!answersOnlyText) {
+                alert("정답 및 해설 내용을 추출하지 못했습니다.");
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(answersOnlyText);
+                const originalText = copyAnswersBtn.innerHTML;
+                copyAnswersBtn.innerHTML = "✅ 정답·해설 복사 완료!";
+                copyAnswersBtn.disabled = true;
+
+                setTimeout(() => {
+                    copyAnswersBtn.innerHTML = originalText;
+                    copyAnswersBtn.disabled = false;
+                }, 2000);
+            } catch (err) {
+                console.error("정답/해설 복사 실패:", err);
+                alert("클립보드 복사에 실패했습니다. 권한을 확인해 주세요.");
+            }
+        });
+    }
+
     downloadPdfBtn.addEventListener("click", async () => {
         if (!currentMarkdownText) return;
 
+        const formattedMarkdown = formatQuizMarkdown(currentMarkdownText);
         // 원본 Markdown을 파싱하여 임시 DOM 객체 생성
         const tempDiv = document.createElement("div");
         if (window.marked && typeof window.marked.parse === "function") {
-            tempDiv.innerHTML = window.marked.parse(currentMarkdownText);
+            tempDiv.innerHTML = window.marked.parse(formattedMarkdown);
+            beautifyQuizOptions(tempDiv);
         } else {
             tempDiv.innerHTML = `<p>${escapeHtml(currentMarkdownText)}</p>`;
         }

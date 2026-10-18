@@ -27,6 +27,11 @@
     padding: 0;
 }
 
+html, body {
+    width: 100%;
+    overflow-x: hidden;
+}
+
 body {
     font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background-color: var(--bg-page);
@@ -36,8 +41,11 @@ body {
 }
 
 .container {
+    width: 100%;
     max-width: 1200px;
     margin: 0 auto;
+    padding: 0 10px;
+    box-sizing: border-box;
 }
 
 /* --------------------------------------------------------------------------
@@ -79,9 +87,10 @@ body {
    -------------------------------------------------------------------------- */
 .main-content {
     display: grid;
-    grid-template-columns: 460px 1fr;
+    grid-template-columns: 440px minmax(0, 1fr);
     gap: 25px;
     align-items: start;
+    width: 100%;
 }
 
 @media (max-width: 900px) {
@@ -99,6 +108,13 @@ body {
     padding: 26px;
     box-shadow: var(--shadow);
     border: 1px solid var(--border-color);
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.result-card {
+    min-height: 520px;
 }
 
 .card-title {
@@ -428,6 +444,8 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
     border-bottom: 1px solid var(--border-color);
     padding-bottom: 14px;
     margin-bottom: 18px;
@@ -439,7 +457,9 @@ body {
 
 .result-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
+    align-items: center;
 }
 
 .empty-state,
@@ -498,11 +518,13 @@ body {
 .quiz-result-content {
     font-size: 15px;
     line-height: 1.8;
+    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 .quiz-result-content h3 {
     margin-top: 24px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     font-size: 17px;
     color: #1e1b4b;
     border-left: 4px solid var(--primary);
@@ -511,6 +533,50 @@ body {
 
 .quiz-result-content p {
     margin-bottom: 12px;
+}
+
+/* 객관식 보기 전용 스타일 (항상 줄바꿈 및 좌측 정렬 보장) */
+.quiz-options-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0 16px 0;
+}
+
+.quiz-option-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 13px;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14.5px;
+    text-align: left;
+    line-height: 1.55;
+    transition: all 0.15s ease;
+}
+
+.quiz-option-item:hover {
+    background-color: #f1f5f9;
+    border-color: #cbd5e1;
+}
+
+.quiz-option-num {
+    font-weight: 700;
+    color: var(--primary);
+    background: var(--primary-light);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 13px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.quiz-option-text {
+    flex: 1;
+    word-break: break-word;
+    color: #1e293b;
 }
 
 .quiz-result-content details {
@@ -631,4 +697,13 @@ body {
         break-inside: avoid !important;
     }
 }
+
+/* 모바일 화면 크기 및 줌 방지 */
+@media (max-width: 768px) {
+    .form-select,
+    .form-input {
+        font-size: 16px !important;
+    }
+}
+
 
