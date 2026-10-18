@@ -340,6 +340,58 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // 정답 및 해설을 분리하지 않고 빨간 형광펜으로 정답을 칠한 통합 해설 박스로 구성
+    function beautifyQuizExplanations(container) {
+        if (!container) return;
+        const detailsList = container.querySelectorAll("details");
+        detailsList.forEach((details) => {
+            const summary = details.querySelector("summary");
+            const summaryHtml = summary ? summary.outerHTML : "<summary><b>정답 및 해설 보기 (클릭)</b></summary>";
+
+            const clone = details.cloneNode(true);
+            const cloneSummary = clone.querySelector("summary");
+            if (cloneSummary) cloneSummary.remove();
+
+            const innerHtml = clone.innerHTML.trim();
+            const innerText = clone.textContent.trim();
+
+            // 이미 mark 태그가 있으면 클래스 보장 후 래핑
+            if (innerHtml.includes("highlight-answer") || innerHtml.includes("<mark")) {
+                let processedHtml = innerHtml.replace(/<mark(?!\s+class)/gi, '<mark class="highlight-answer"');
+                details.innerHTML = `${summaryHtml}<div class="explanation-box"><p class="explanation-text">${processedHtml}</p></div>`;
+                return;
+            }
+
+            // 분리된 정답/해설 포맷인 경우 하나의 문단으로 통합하고 정답에 빨간 형광펜 칠하기
+            let answer = "";
+            let explanation = "";
+
+            const ansMatch = innerText.match(/(?:정답|답안)\s*[:：]\s*([^\n\r]+)/i);
+            if (ansMatch) {
+                answer = ansMatch[1].replace(/^[*-•\s]+/, "").trim();
+            }
+
+            const expMatch = innerText.match(/(?:해설|풀이|근거)\s*[:：]\s*([\s\S]+)/i);
+            if (expMatch) {
+                explanation = expMatch[1].trim();
+            } else if (ansMatch) {
+                explanation = innerText.replace(ansMatch[0], "").replace(/^[*-•\s]+/, "").trim();
+            } else {
+                explanation = innerText;
+            }
+
+            const markBadge = answer ? `<mark class="highlight-answer">정답: ${escapeHtml(answer)}</mark> ` : "";
+            const cleanExp = escapeHtml(explanation);
+
+            details.innerHTML = `
+                ${summaryHtml}
+                <div class="explanation-box">
+                    <p class="explanation-text">${markBadge}${cleanExp}</p>
+                </div>
+            `;
+        });
+    }
+
     function extractAnswersOnly(markdown) {
         if (!markdown) return "";
 
@@ -375,21 +427,34 @@ document.addEventListener("DOMContentLoaded", () => {
                     const summary = clone.querySelector("summary");
                     if (summary) summary.remove();
 
-                    const lines = clone.textContent.split("\n").map((l) => l.trim()).filter(Boolean);
-                    lines.forEach((line) => {
-                        if (line.includes("정답")) {
-                            answerText = line.replace(/^[*-•\s]+/, "");
-                        } else if (line.includes("해설")) {
-                            explanationText = line.replace(/^[*-•\s]+/, "");
-                        } else if (explanationText) {
-                            explanationText += " " + line;
+                    const text = clone.textContent.trim();
+
+                    const ansMatch = text.match(/(?:정답|답안)\s*[:：]\s*([^\n\r]+)/i);
+                    if (ansMatch) {
+                        answerText = ansMatch[1].replace(/^[*-•\s]+/, "").trim();
+                        // 인라인에 해설이 붙어 있는 경우 분리
+                        const inlineExp = answerText.match(/^(.*?)(?:\s+(?:해설|풀이|근거)\s*[:：]|\s{2,})(.*)$/);
+                        if (inlineExp) {
+                            answerText = inlineExp[1].trim();
+                            explanationText = inlineExp[2].trim();
                         }
-                    });
+                    }
+
+                    if (!explanationText) {
+                        const expMatch = text.match(/(?:해설|풀이|근거)\s*[:：]\s*([\s\S]+)/i);
+                        if (expMatch) {
+                            explanationText = expMatch[1].trim();
+                        } else if (ansMatch) {
+                            explanationText = text.replace(ansMatch[0], "").replace(/^[*-•\s]+/, "").trim();
+                        } else {
+                            explanationText = text;
+                        }
+                    }
                 }
 
                 let itemStr = `[${questionTitle}]\n`;
-                if (answerText) itemStr += `- ${answerText}\n`;
-                if (explanationText) itemStr += `- ${explanationText}\n`;
+                if (answerText) itemStr += `- 정답: ${answerText}\n`;
+                if (explanationText) itemStr += `- 해설: ${explanationText}\n`;
                 items.push(itemStr.trim());
             });
         }
@@ -400,12 +465,12 @@ document.addEventListener("DOMContentLoaded", () => {
             for (const block of questionBlocks) {
                 if (!block.trim()) continue;
                 const matchHeader = block.match(/###?\s*(문제\s*\d+[\.\:]?\s*[^\n]+)/i);
-                const matchAns = block.match(/-\s*\*\*정답\*\*\s*:\s*([^\n]+)/i) || block.match(/정답\s*:\s*([^\n]+)/i);
-                const matchExp = block.match(/-\s*\*\*해설\*\*\s*:\s*([\s\S]*?)(?=<\/details>|---|###|$)/i) || block.match(/해설\s*:\s*([\s\S]*?)(?=<\/details>|---|###|$)/i);
+                const matchAns = block.match(/(?:정답|답안)\s*[:：]\s*([^\n\r]+)/i);
+                const matchExp = block.match(/(?:해설|풀이|근거)\s*[:：]\s*([\s\S]*?)(?=<\/details>|---|###|$)/i);
 
                 if (matchHeader) {
                     let blockStr = `[${matchHeader[1].trim()}]\n`;
-                    if (matchAns) blockStr += `- 정답: ${matchAns[1].trim()}\n`;
+                    if (matchAns) blockStr += `- 정답: ${matchAns[1].replace(/<[^>]+>/g, "").trim()}\n`;
                     if (matchExp) {
                         const cleanExp = matchExp[1].replace(/<\/?[^>]+(>|$)/g, "").trim();
                         blockStr += `- 해설: ${cleanExp}\n`;
@@ -428,6 +493,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (window.marked && typeof window.marked.parse === "function") {
             quizResult.innerHTML = window.marked.parse(formattedMarkdown);
             beautifyQuizOptions(quizResult);
+            beautifyQuizExplanations(quizResult);
         } else {
             // fallback: 일반 텍스트 보존 표시
             quizResult.innerHTML = `<pre style="white-space: pre-wrap;">${escapeHtml(markdownText)}</pre>`;
