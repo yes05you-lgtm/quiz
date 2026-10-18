@@ -42,10 +42,10 @@
                     <!-- 1. PDF 파일 업로드 영역 -->
                     <div class="form-group">
                         <label class="form-label" for="pdf_file">
-                            PDF 파일 선택 <span class="required">*</span>
+                            PDF 파일 선택 (최대 5개) <span class="required">*</span>
                         </label>
                         <div class="file-dropzone" id="dropzone">
-                            <input type="file" id="pdf_file" name="pdf_file" accept=".pdf" class="file-input" required>
+                            <input type="file" id="pdf_file" name="pdf_files" accept=".pdf" class="file-input" multiple>
                             <div class="dropzone-content">
                                 <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -54,12 +54,15 @@
                                     <line x1="9" y1="15" x2="15" y2="15"></line>
                                 </svg>
                                 <p class="dropzone-text" id="file-label-text">클릭하여 PDF 파일을 선택하거나 여기로 드래그하세요</p>
-                                <p class="dropzone-subtext">최대 파일 크기: 16MB (.pdf 파일만 가능)</p>
+                                <p class="dropzone-subtext">최대 5개 파일 선택 가능 • 파일당 최대 16MB (.pdf 파일만 가능)</p>
                             </div>
                         </div>
-                        <div id="file-info" class="file-info hidden">
-                            <span class="file-info-name" id="file-name"></span>
-                            <button type="button" class="btn-remove-file" id="btn-remove-file">삭제</button>
+                        <div id="file-list-container" class="file-list-container hidden">
+                            <div class="file-list-header">
+                                <span class="file-list-count">선택된 파일 (<strong id="file-count">0</strong>/5)</span>
+                                <button type="button" class="btn-clear-all" id="btn-clear-all">전체 삭제</button>
+                            </div>
+                            <ul id="file-list" class="file-list"></ul>
                         </div>
                     </div>
 

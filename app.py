@@ -24,8 +24,8 @@ app = Flask(
     static_folder=os.path.join(BASE_DIR, "static")
 )
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "default-dev-secret-key")
-# 업로드 용량 제한 (최대 16MB)
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+# 업로드 용량 제한 (최대 5개 파일 고려 50MB)
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 
 # 허용된 문제 유형 및 난이도 목록
 ALLOWED_QUIZ_TYPES = {
@@ -66,7 +66,7 @@ def service_worker():
 
 @app.route("/generate", methods=["POST"])
 def generate_quiz():
-    """PDF 파일과 퀴즈 옵션을 받아 Gemini API로 퀴즈를 생성하는 REST API 라우트"""
+    """PDF 파일(최대 5개)과 퀴즈 옵션을 받아 Gemini API로 퀴즈를 생성하는 REST API 라우트"""
     logger.info("=== 퀴즈 생성 요청 수신 ===")
 
     # 1. API 키 확인 (.env에서만 읽기)
@@ -79,19 +79,25 @@ def generate_quiz():
             "error": ".env 파일에 유효한 GEMINI_API_KEY가 설정되지 않았습니다. API 키를 등록 후 다시 시도해주세요."
         }), 500
 
-    # 2. 파일 업로드 검증
-    if "pdf_file" not in request.files:
+    # 2. 파일 업로드 검증 (최대 5개 지원)
+    uploaded_files = request.files.getlist("pdf_files")
+    if not uploaded_files:
+        uploaded_files = request.files.getlist("pdf_file")
+
+    valid_files = [f for f in uploaded_files if f and f.filename and f.filename.strip() != ""]
+
+    if not valid_files:
         logger.warning("검증 실패: 업로드된 파일이 없습니다.")
-        return jsonify({"success": False, "error": "PDF 파일을 선택해 주세요."}), 400
+        return jsonify({"success": False, "error": "PDF 파일을 1개 이상 선택해 주세요."}), 400
 
-    file = request.files["pdf_file"]
-    if file.filename == "":
-        logger.warning("검증 실패: 파일 이름이 비어 있습니다.")
-        return jsonify({"success": False, "error": "선택된 파일이 없습니다."}), 400
+    if len(valid_files) > 5:
+        logger.warning(f"검증 실패: 파일 개수 초과 ({len(valid_files)}개)")
+        return jsonify({"success": False, "error": "PDF 파일은 최대 5개까지 업로드할 수 있습니다."}), 400
 
-    if not file.filename.lower().endswith(".pdf"):
-        logger.warning(f"검증 실패: 지원되지 않는 파일 형식 ({file.filename})")
-        return jsonify({"success": False, "error": "PDF 파일만 업로드할 수 있습니다."}), 400
+    for f in valid_files:
+        if not f.filename.lower().endswith(".pdf"):
+            logger.warning(f"검증 실패: 지원되지 않는 파일 형식 ({f.filename})")
+            return jsonify({"success": False, "error": f"'{f.filename}'은(는) PDF 파일이 아닙니다. PDF 파일만 업로드할 수 있습니다."}), 400
 
     # 3. 폼 필드 입력 검증
     quiz_type_key = request.form.get("quiz_type", "").strip()
@@ -117,46 +123,61 @@ def generate_quiz():
     quiz_type_label = ALLOWED_QUIZ_TYPES[quiz_type_key]
     difficulty_label = ALLOWED_DIFFICULTIES[difficulty_key]
 
-    logger.info(f"요청 파라미터 - 파일명: {file.filename}, 유형: {quiz_type_label}, 난이도: {difficulty_label}, 문항수: {num_questions}")
+    file_names = ", ".join(f.filename for f in valid_files)
+    logger.info(f"요청 파라미터 - 파일({len(valid_files)}개): [{file_names}], 유형: {quiz_type_label}, 난이도: {difficulty_label}, 문항수: {num_questions}")
 
-    # 4. PDF 텍스트 추출
+    # 4. 각 PDF 텍스트 추출 및 결합
+    extracted_docs = []
+    total_pages = 0
+    total_text_length = 0
+
     try:
-        pdf_bytes = file.read()
-        pdf_reader = PdfReader(BytesIO(pdf_bytes))
-        total_pages = len(pdf_reader.pages)
-        extracted_text = ""
+        for idx, f in enumerate(valid_files, 1):
+            pdf_bytes = f.read()
+            pdf_reader = PdfReader(BytesIO(pdf_bytes))
+            file_pages = len(pdf_reader.pages)
+            total_pages += file_pages
 
-        for page_idx, page in enumerate(pdf_reader.pages):
-            page_text = page.extract_text()
-            if page_text:
-                extracted_text += page_text + "\n"
+            doc_text = ""
+            for page in pdf_reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    doc_text += page_text + "\n"
 
-        extracted_text = extracted_text.strip()
-        logger.info(f"PDF 파싱 완료: 총 {total_pages}페이지, 추출 텍스트 길이: {len(extracted_text)}자")
+            doc_text = doc_text.strip()
+            if doc_text:
+                extracted_docs.append(f"--- [참고 문서 {idx}: {f.filename}] ---\n{doc_text}")
+                total_text_length += len(doc_text)
+            else:
+                logger.warning(f"경고: 파일 '{f.filename}'에서 텍스트가 추출되지 않았습니다.")
 
-        if not extracted_text or len(extracted_text) < 30:
+        logger.info(f"PDF 파싱 완료: 총 {len(valid_files)}개 파일, {total_pages}페이지, 추출 텍스트 길이: {total_text_length}자")
+
+        if not extracted_docs or total_text_length < 30:
             logger.warning("검증 실패: PDF에서 추출된 텍스트가 없거나 너무 적습니다.")
             return jsonify({
                 "success": False,
-                "error": "PDF 파일에서 텍스트를 추출할 수 없습니다. 스캔 이미지 전용 PDF가 아닌 텍스트가 포함된 PDF인지 확인해 주세요."
+                "error": "업로드된 PDF 파일에서 유효한 텍스트를 추출할 수 없습니다. 스캔 이미지 전용 PDF가 아닌 텍스트가 포함된 PDF인지 확인해 주세요."
             }), 400
+
+        full_extracted_text = "\n\n".join(extracted_docs)
 
     except Exception as e:
         logger.error(f"PDF 파싱 중 오류 발생: {str(e)}", exc_info=True)
         return jsonify({"success": False, "error": f"PDF 파일을 읽는 도중 오류가 발생했습니다: {str(e)}"}), 500
 
     # 5. 프롬프트 엔지니어링
-    # 텍스트가 너무 길 경우 앞부분 약 30,000자까지 활용
-    max_context_chars = 30000
-    if len(extracted_text) > max_context_chars:
+    # 여러 문서 종합을 위해 최대 약 50,000자까지 프롬프트에 활용
+    max_context_chars = 50000
+    if len(full_extracted_text) > max_context_chars:
         logger.info(f"PDF 텍스트가 길어 상위 {max_context_chars}자만 프롬프트에 포함합니다.")
-        context_text = extracted_text[:max_context_chars] + "\n...(이하 생략)..."
+        context_text = full_extracted_text[:max_context_chars] + "\n...(이하 생략)..."
     else:
-        context_text = extracted_text
+        context_text = full_extracted_text
 
     system_instruction = (
         "당신은 시험 문제 출제 전문 교수이자 수능 출제위원급 AI 전문가입니다. "
-        "제공된 본문 내용을 면밀히 분석하여 핵심 개념을 평가할 수 있는 고품질 퀴즈를 한국어로 제작하세요."
+        "제공된 본문 내용(여러 PDF 문서가 포함될 수 있음)을 종합적으로 분석하여 핵심 개념을 고르게 평가할 수 있는 고품질 퀴즈를 한국어로 제작하세요."
     )
 
     prompt = f"""[출제 지침]

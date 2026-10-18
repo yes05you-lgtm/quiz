@@ -7,9 +7,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const quizForm = document.getElementById("quiz-form");
     const fileInput = document.getElementById("pdf_file");
     const dropzone = document.getElementById("dropzone");
-    const fileInfo = document.getElementById("file-info");
-    const fileNameSpan = document.getElementById("file-name");
-    const btnRemoveFile = document.getElementById("btn-remove-file");
+    const fileLabelText = document.getElementById("file-label-text");
+    const fileListContainer = document.getElementById("file-list-container");
+    const fileCountSpan = document.getElementById("file-count");
+    const fileListEl = document.getElementById("file-list");
+    const btnClearAll = document.getElementById("btn-clear-all");
 
     const submitBtn = document.getElementById("submit-btn");
     const btnText = submitBtn.querySelector(".btn-text");
@@ -28,48 +30,123 @@ document.addEventListener("DOMContentLoaded", () => {
     // 최신 생성된 원본 Markdown 텍스트 저장용 변수
     let currentMarkdownText = "";
 
-    // -------------------------------------------------------------------------
-    // 1. 파일 선택 및 드래그 앤 드롭 이벤트 핸들러
-    // -------------------------------------------------------------------------
-    function handleFileSelected(file) {
-        if (!file) return;
+    // 업로드할 파일 목록 상태 (최대 5개)
+    let selectedFiles = [];
+    const MAX_FILES = 5;
+    const MAX_FILE_SIZE = 16 * 1024 * 1024; // 16MB
 
-        // 확장자 검사
-        if (!file.name.toLowerCase().endsWith(".pdf")) {
-            showError("PDF 파일만 업로드할 수 있습니다.");
-            clearFile();
-            return;
-        }
-
-        // 파일 크기 검사 (최대 16MB)
-        const maxSize = 16 * 1024 * 1024;
-        if (file.size > maxSize) {
-            showError("파일 크기가 16MB를 초과합니다. 더 작은 PDF를 업로드해 주세요.");
-            clearFile();
-            return;
-        }
+    // -------------------------------------------------------------------------
+    // 1. 파일 관리 및 UI 렌더링
+    // -------------------------------------------------------------------------
+    function handleFilesAdded(incomingFiles) {
+        if (!incomingFiles || incomingFiles.length === 0) return;
 
         hideError();
-        fileNameSpan.textContent = `${file.name} (${formatBytes(file.size)})`;
-        fileInfo.classList.remove("hidden");
-        dropzone.classList.add("hidden");
+        const filesToAdd = Array.from(incomingFiles);
+        const warningMessages = [];
+
+        for (const file of filesToAdd) {
+            // 최대 개수 제한 체크
+            if (selectedFiles.length >= MAX_FILES) {
+                warningMessages.push(`최대 ${MAX_FILES}개의 파일까지만 등록할 수 있습니다.`);
+                break;
+            }
+
+            // 확장자 검사
+            if (!file.name.toLowerCase().endsWith(".pdf")) {
+                warningMessages.push(`'${file.name}'은(는) PDF 파일이 아닙니다.`);
+                continue;
+            }
+
+            // 파일 크기 검사
+            if (file.size > MAX_FILE_SIZE) {
+                warningMessages.push(`'${file.name}'의 크기가 16MB를 초과합니다.`);
+                continue;
+            }
+
+            // 중복 파일 검사 (파일명 및 파일 크기 기준)
+            const isDuplicate = selectedFiles.some(
+                (f) => f.name === file.name && f.size === file.size
+            );
+            if (isDuplicate) {
+                continue;
+            }
+
+            selectedFiles.push(file);
+        }
+
+        if (warningMessages.length > 0) {
+            showError(warningMessages.join(" "));
+        }
+
+        updateFileListUI();
+        fileInput.value = ""; // 동일 파일 재선택 허용을 위해 초기화
     }
 
-    function clearFile() {
-        fileInput.value = "";
-        fileNameSpan.textContent = "";
-        fileInfo.classList.add("hidden");
-        dropzone.classList.remove("hidden");
+    function removeFile(index) {
+        if (index >= 0 && index < selectedFiles.length) {
+            selectedFiles.splice(index, 1);
+            hideError();
+            updateFileListUI();
+        }
     }
 
+    function clearAllFiles() {
+        selectedFiles = [];
+        hideError();
+        updateFileListUI();
+    }
+
+    function updateFileListUI() {
+        const count = selectedFiles.length;
+        fileCountSpan.textContent = count;
+
+        if (count === 0) {
+            fileListContainer.classList.add("hidden");
+            fileListEl.innerHTML = "";
+            dropzone.classList.remove("hidden");
+            fileLabelText.textContent = "클릭하여 PDF 파일을 선택하거나 여기로 드래그하세요";
+        } else {
+            fileListContainer.classList.remove("hidden");
+            fileListEl.innerHTML = selectedFiles.map((file, idx) => `
+                <li class="file-item">
+                    <div class="file-item-info">
+                        <span class="file-item-icon">📄</span>
+                        <span class="file-item-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+                        <span class="file-item-size">(${formatBytes(file.size)})</span>
+                    </div>
+                    <button type="button" class="btn-remove-item" data-index="${idx}" title="삭제">✕</button>
+                </li>
+            `).join("");
+
+            if (count >= MAX_FILES) {
+                dropzone.classList.add("hidden");
+            } else {
+                dropzone.classList.remove("hidden");
+                fileLabelText.textContent = `+ 클릭 또는 드래그하여 PDF 파일 추가 (${MAX_FILES - count}개 더 추가 가능)`;
+            }
+        }
+    }
+
+    // 파일 선택(change) 이벤트
     fileInput.addEventListener("change", (e) => {
-        if (e.target.files && e.target.files[0]) {
-            handleFileSelected(e.target.files[0]);
+        handleFilesAdded(e.target.files);
+    });
+
+    // 파일 목록 개별 삭제 이벤트 위임
+    fileListEl.addEventListener("click", (e) => {
+        const removeBtn = e.target.closest(".btn-remove-item");
+        if (removeBtn) {
+            const index = parseInt(removeBtn.dataset.index, 10);
+            if (!isNaN(index)) {
+                removeFile(index);
+            }
         }
     });
 
-    btnRemoveFile.addEventListener("click", () => {
-        clearFile();
+    // 전체 삭제 버튼 이벤트
+    btnClearAll.addEventListener("click", () => {
+        clearAllFiles();
     });
 
     // 드래그 앤 드롭 효과
@@ -90,9 +167,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     dropzone.addEventListener("drop", (e) => {
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            fileInput.files = e.dataTransfer.files;
-            handleFileSelected(e.dataTransfer.files[0]);
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleFilesAdded(e.dataTransfer.files);
         }
     });
 
@@ -104,9 +180,13 @@ document.addEventListener("DOMContentLoaded", () => {
         hideError();
 
         // 프론트엔드 1차 유효성 검사
-        const file = fileInput.files[0];
-        if (!file) {
-            showError("PDF 파일을 업로드해 주세요.");
+        if (selectedFiles.length === 0) {
+            showError("PDF 파일을 1개 이상 업로드해 주세요.");
+            return;
+        }
+
+        if (selectedFiles.length > MAX_FILES) {
+            showError(`최대 ${MAX_FILES}개의 PDF 파일만 업로드할 수 있습니다.`);
             return;
         }
 
@@ -122,6 +202,13 @@ document.addEventListener("DOMContentLoaded", () => {
         setLoading(true);
 
         const formData = new FormData(quizForm);
+        // 기본 폼 데이터에서 파일 필드 정리 후 선택된 파일 목록 주입
+        formData.delete("pdf_files");
+        formData.delete("pdf_file");
+        selectedFiles.forEach((file) => {
+            formData.append("pdf_files", file, file.name);
+            formData.append("pdf_file", file, file.name);
+        });
 
         try {
             const response = await fetch("/generate", {
