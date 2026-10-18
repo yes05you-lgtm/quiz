@@ -1,7 +1,7 @@
 import os
 import logging
 from io import BytesIO
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory, make_response
 from dotenv import load_dotenv
 from pypdf import PdfReader
 from google import genai
@@ -39,6 +39,21 @@ ALLOWED_DIFFICULTIES = {
 def index():
     """메인 페이지 라우트"""
     return render_template("index.html")
+
+
+@app.route("/manifest.json")
+def manifest():
+    """PWA 매니페스트 서빙 라우트"""
+    return send_from_directory("static", "manifest.json", mimetype="application/manifest+json")
+
+
+@app.route("/sw.js")
+def service_worker():
+    """PWA 서비스 워커 서빙 라우트 (루트 스코프 허용 헤더 포함)"""
+    response = make_response(send_from_directory("static", "sw.js"))
+    response.headers["Content-Type"] = "application/javascript"
+    response.headers["Service-Worker-Allowed"] = "/"
+    return response
 
 
 @app.route("/generate", methods=["POST"])

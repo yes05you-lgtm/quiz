@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="38" fill="#4f46e5"/>
+  <!-- 문서 배경 -->
+  <rect x="42" y="32" width="108" height="128" rx="14" fill="#ffffff"/>
+  <!-- 문서 헤더 선 -->
+  <rect x="58" y="52" width="50" height="8" rx="4" fill="#4f46e5"/>
+  <rect x="58" y="68" width="76" height="6" rx="3" fill="#cbd5e1"/>
+  <rect x="58" y="80" width="64" height="6" rx="3" fill="#cbd5e1"/>
+  <!-- 체크박스 및 문항 -->
+  <circle cx="64" cy="102" r="6" fill="#10b981"/>
+  <rect x="76" y="99" width="58" height="6" rx="3" fill="#64748b"/>
+  <circle cx="64" cy="120" r="6" fill="#e2e8f0"/>
+  <rect x="76" y="117" width="48" height="6" rx="3" fill="#64748b"/>
+  <circle cx="64" cy="138" r="6" fill="#e2e8f0"/>
+  <rect x="76" y="135" width="54" height="6" rx="3" fill="#64748b"/>
+  <!-- AI 스파클 배지 -->
+  <circle cx="136" cy="48" r="18" fill="#fbbf24"/>
+  <path d="M136 36 L139 45 L148 48 L139 51 L136 60 L133 51 L124 48 L133 45 Z" fill="#ffffff"/>
+</svg>
