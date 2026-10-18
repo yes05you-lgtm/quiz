@@ -1,0 +1,516 @@
+/* ==========================================================================
+   AI Quiz Generator - 기본 스타일시트 (style.css)
+   ========================================================================== */
+
+:root {
+    --primary: #4f46e5;
+    --primary-hover: #4338ca;
+    --primary-light: #eef2ff;
+    --secondary: #64748b;
+    --secondary-hover: #475569;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+    --bg-page: #f8fafc;
+    --bg-card: #ffffff;
+    --danger: #ef4444;
+    --danger-light: #fef2f2;
+    --success: #10b981;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-page);
+    color: var(--text-main);
+    line-height: 1.6;
+    padding: 30px 15px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* --------------------------------------------------------------------------
+   헤더 (Header)
+   -------------------------------------------------------------------------- */
+.header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.logo-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    background-color: var(--primary-light);
+    color: var(--primary);
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 20px;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+}
+
+.title {
+    font-size: 32px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    font-size: 15px;
+    color: var(--text-muted);
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* --------------------------------------------------------------------------
+   메인 레이아웃 (Grid 2열)
+   -------------------------------------------------------------------------- */
+.main-content {
+    display: grid;
+    grid-template-columns: 460px 1fr;
+    gap: 25px;
+    align-items: start;
+}
+
+@media (max-width: 900px) {
+    .main-content {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* --------------------------------------------------------------------------
+   카드 공통 스타일
+   -------------------------------------------------------------------------- */
+.card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: 26px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border-color);
+}
+
+.card-title {
+    font-size: 19px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   입력 폼 요소
+   -------------------------------------------------------------------------- */
+.form-group {
+    margin-bottom: 18px;
+}
+
+.form-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 7px;
+    color: #334155;
+}
+
+.required {
+    color: var(--danger);
+}
+
+.form-select,
+.form-input {
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background-color: #ffffff;
+    color: var(--text-main);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-select:focus,
+.form-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
+.form-row {
+    display: flex;
+    gap: 15px;
+}
+
+.col-half {
+    flex: 1;
+}
+
+.helper-text {
+    display: block;
+    margin-top: 5px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* 파일 드롭존 (Dropzone) */
+.file-dropzone {
+    position: relative;
+    border: 2px dashed #cbd5e1;
+    border-radius: var(--radius-md);
+    background-color: #f8fafc;
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.file-dropzone:hover,
+.file-dropzone.dragover {
+    border-color: var(--primary);
+    background-color: var(--primary-light);
+}
+
+.file-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.dropzone-icon {
+    width: 36px;
+    height: 36px;
+    color: #94a3b8;
+    margin-bottom: 8px;
+}
+
+.dropzone-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+}
+
+.dropzone-subtext {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+
+.file-info {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background-color: var(--primary-light);
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+.file-info-name {
+    color: var(--primary);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 320px;
+}
+
+.btn-remove-file {
+    background: none;
+    border: none;
+    color: var(--danger);
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   버튼 및 알림
+   -------------------------------------------------------------------------- */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    border: none;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 13px;
+    font-size: 15px;
+    background-color: var(--primary);
+    color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background-color: var(--primary-hover);
+}
+
+.btn-primary:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background-color: #f1f5f9;
+    color: #334155;
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    background-color: #e2e8f0;
+}
+
+.btn-sm {
+    padding: 7px 12px;
+    font-size: 13px;
+}
+
+.alert {
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+
+.alert-error {
+    background-color: var(--danger-light);
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+/* --------------------------------------------------------------------------
+   결과 영역 (Result Area)
+   -------------------------------------------------------------------------- */
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+}
+
+.result-header .card-title {
+    margin-bottom: 0;
+}
+
+.result-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.empty-state,
+.loading-state {
+    text-align: center;
+    padding: 50px 20px;
+    color: var(--text-muted);
+}
+
+.empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
+
+.empty-title,
+.loading-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 6px;
+}
+
+.empty-desc,
+.loading-desc {
+    font-size: 13px;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+/* 로딩 스피너 애니메이션 */
+.loading-spinner {
+    width: 44px;
+    height: 44px;
+    border: 4px solid var(--border-color);
+    border-top: 4px solid var(--primary);
+    border-radius: 50%;
+    margin: 0 auto 16px;
+    animation: spin 0.9s linear infinite;
+}
+
+.spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top: 2px solid #ffffff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 퀴즈 결과 마크다운 렌더링 스타일 */
+.quiz-result-content {
+    font-size: 15px;
+    line-height: 1.8;
+}
+
+.quiz-result-content h3 {
+    margin-top: 24px;
+    margin-bottom: 10px;
+    font-size: 17px;
+    color: #1e1b4b;
+    border-left: 4px solid var(--primary);
+    padding-left: 10px;
+}
+
+.quiz-result-content p {
+    margin-bottom: 12px;
+}
+
+.quiz-result-content details {
+    background-color: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-top: 12px;
+    margin-bottom: 20px;
+    transition: background 0.2s;
+}
+
+.quiz-result-content details[open] {
+    background-color: #f1f5f9;
+}
+
+.quiz-result-content summary {
+    font-weight: 600;
+    color: var(--primary);
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+}
+
+.quiz-result-content summary:hover {
+    color: var(--primary-hover);
+}
+
+.quiz-result-content hr {
+    border: none;
+    border-top: 1px dashed var(--border-color);
+    margin: 22px 0;
+}
+
+/* 유틸리티 */
+.hidden {
+    display: none !important;
+}
+
+.footer {
+    text-align: center;
+    margin-top: 40px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* ==========================================================================
+   PDF 시험지 출력 전용 스타일 (페이지 끊김 방지 및 블록 레이아웃)
+   ========================================================================== */
+.pdf-export-container {
+    padding: 10px;
+    font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+    color: #1e293b;
+    background: #ffffff;
+}
+
+.pdf-header {
+    border-bottom: 2px solid #0f172a;
+    padding-bottom: 12px;
+    margin-bottom: 24px;
+    text-align: center;
+}
+
+.pdf-header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 12px;
+}
+
+.pdf-meta-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 8px;
+}
+
+.pdf-meta-table td {
+    border: 1px solid #cbd5e1;
+    padding: 6px 12px;
+    text-align: center;
+    background-color: #f8fafc;
+}
+
+.pdf-question-block {
+    /* 각 문제 블록이 페이지 중간에서 끊어지지 않도록 방지 */
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 22px;
+    background-color: #ffffff;
+}
+
+.pdf-question-block h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 10px;
+    line-height: 1.5;
+}
+
+.pdf-question-block p {
+    font-size: 14px;
+    line-height: 1.8;
+    color: #334155;
+    margin-bottom: 6px;
+}
+
+/* 인쇄 및 PDF 미디어 규칙 */
+@media print {
+    details, summary {
+        display: none !important;
+    }
+    .pdf-question-block {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+}
+

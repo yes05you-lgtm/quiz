@@ -1,0 +1,15 @@
+# 가상환경
+venv/
+
+# 환경변수 및 민감 정보
+.env
+
+# 파이썬 캐시 파일
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 운영체제 생성 파일
+.DS_Store
+Thumbs.db

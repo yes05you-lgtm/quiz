@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Quiz Generator - PDF 기반 맞춤형 퀴즈 생성기</title>
+    <!-- 구글 폰트: Pretendard 대체 Noto Sans KR -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Markdown 파서 CDN (marked.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- PDF 생성 라이브러리 CDN (html2pdf.js) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- 헤더 영역 -->
+        <header class="header">
+            <div class="logo-badge">AI Study Assistant</div>
+            <h1 class="title">PDF 맞춤형 AI 퀴즈 생성기</h1>
+            <p class="subtitle">PDF 문서를 업로드하고 문제 유형, 난이도, 문항 수를 선택하면 Gemini AI가 퀴즈를 자동으로 생성합니다.</p>
+        </header>
+
+        <!-- 메인 콘텐츠 영역 (좌우 2열 또는 상하 배치) -->
+        <main class="main-content">
+            <!-- 퀴즈 생성 폼 카드 -->
+            <section class="card form-card">
+                <h2 class="card-title">퀴즈 생성 옵션 설정</h2>
+
+                <form id="quiz-form" enctype="multipart/form-data">
+                    <!-- 1. PDF 파일 업로드 영역 -->
+                    <div class="form-group">
+                        <label class="form-label" for="pdf_file">
+                            PDF 파일 선택 <span class="required">*</span>
+                        </label>
+                        <div class="file-dropzone" id="dropzone">
+                            <input type="file" id="pdf_file" name="pdf_file" accept=".pdf" class="file-input" required>
+                            <div class="dropzone-content">
+                                <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                    <line x1="12" y1="18" x2="12" y2="12"></line>
+                                    <line x1="9" y1="15" x2="15" y2="15"></line>
+                                </svg>
+                                <p class="dropzone-text" id="file-label-text">클릭하여 PDF 파일을 선택하거나 여기로 드래그하세요</p>
+                                <p class="dropzone-subtext">최대 파일 크기: 16MB (.pdf 파일만 가능)</p>
+                            </div>
+                        </div>
+                        <div id="file-info" class="file-info hidden">
+                            <span class="file-info-name" id="file-name"></span>
+                            <button type="button" class="btn-remove-file" id="btn-remove-file">삭제</button>
+                        </div>
+                    </div>
+
+                    <!-- 2. 문제 유형 선택 -->
+                    <div class="form-group">
+                        <label class="form-label" for="quiz_type">
+                            문제 유형 <span class="required">*</span>
+                        </label>
+                        <select id="quiz_type" name="quiz_type" class="form-select" required>
+                            <option value="multiple_choice_4" selected>객관식 (4지선다)</option>
+                            <option value="multiple_choice_5">객관식 (5지선다)</option>
+                            <option value="short_answer">주관식 (단답형)</option>
+                            <option value="descriptive">서술형</option>
+                        </select>
+                    </div>
+
+                    <!-- 3. 난이도 및 문항 수 (한 줄 배치) -->
+                    <div class="form-row">
+                        <div class="form-group col-half">
+                            <label class="form-label" for="difficulty">
+                                난이도 <span class="required">*</span>
+                            </label>
+                            <select id="difficulty" name="difficulty" class="form-select" required>
+                                <option value="easy">쉬움 (기본 개념)</option>
+                                <option value="medium" selected>보통 (응용 및 이해)</option>
+                                <option value="hard">어려움 (심층 분석 및 복합)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group col-half">
+                            <label class="form-label" for="num_questions">
+                                문항 수 <span class="required">*</span>
+                            </label>
+                            <input type="number" id="num_questions" name="num_questions" class="form-input" min="1" max="30" value="5" required>
+                            <small class="helper-text">권장: 3 ~ 10문항 (최대 30개)</small>
+                        </div>
+                    </div>
+
+                    <!-- 에러 메시지 알림 박스 -->
+                    <div id="error-box" class="alert alert-error hidden" role="alert">
+                        <span id="error-message"></span>
+                    </div>
+
+                    <!-- 제출 버튼 -->
+                    <button type="submit" id="submit-btn" class="btn btn-primary">
+                        <span class="btn-text">AI 퀴즈 생성하기</span>
+                        <div class="spinner hidden" id="spinner"></div>
+                    </button>
+                </form>
+            </section>
+
+            <!-- 퀴즈 결과 표시 카드 -->
+            <section class="card result-card" id="result-section">
+                <div class="result-header">
+                    <h2 class="card-title">생성된 퀴즈</h2>
+                    <div class="result-actions" id="result-actions" style="display: none;">
+                        <button type="button" id="copy-btn" class="btn btn-secondary btn-sm" title="클립보드에 복사">
+                            📋 결과 복사
+                        </button>
+                        <button type="button" id="download-pdf-btn" class="btn btn-secondary btn-sm" title="정답 및 해설이 제외된 시험지 PDF 다운로드">
+                            📄 PDF 시험지 다운로드
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 로딩 중 상태 안내 -->
+                <div id="loading-state" class="loading-state hidden">
+                    <div class="loading-spinner"></div>
+                    <p class="loading-title">Gemini AI가 문서를 분석하고 있습니다...</p>
+                    <p class="loading-desc">PDF에서 텍스트를 추출하고 맞춤형 퀴즈를 출제 중입니다. 잠시만 기다려주세요.</p>
+                </div>
+
+                <!-- 초기 대기 상태 안내 -->
+                <div id="empty-state" class="empty-state">
+                    <div class="empty-icon">📝</div>
+                    <p class="empty-title">아직 생성된 퀴즈가 없습니다.</p>
+                    <p class="empty-desc">왼쪽 폼에서 PDF 파일을 업로드하고 옵션을 선택한 뒤 [AI 퀴즈 생성하기] 버튼을 눌러주세요.</p>
+                </div>
+
+                <!-- 퀴즈 결과 출력 영역 -->
+                <div id="quiz-result" class="quiz-result-content hidden"></div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>© 2026 AI Quiz Generator • Powered by Flask & Google Gemini API</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
