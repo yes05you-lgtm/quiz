@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 from io import BytesIO
 from flask import Flask, render_template, request, jsonify, send_from_directory, make_response
@@ -8,6 +9,15 @@ from google import genai
 
 # .env 환경변수 로드
 load_dotenv()
+
+# Gemini 후보 모델 목록 (트래픽 급증/503 오류 발생 시 자동 폴백)
+CANDIDATE_MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-flash-latest"
+]
 
 # 로깅 설정 (백엔드 로그: 요청, 응답, 오류 출력)
 logging.basicConfig(
@@ -78,6 +88,46 @@ def internal_server_error(error):
         "success": False,
         "error": "서버 내부 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
     }), 500
+
+
+def generate_quiz_with_fallback(client, prompt, system_instruction):
+    """
+    503 UNAVAILABLE(트래픽 급증) 또는 429(속도 제한) 발생 시
+    자동 재시도 및 차순위 후보 모델로 자동 전환하는 견고한 호출 함수
+    """
+    last_error = None
+    for model_name in CANDIDATE_MODELS:
+        for attempt in range(2):  # 각 모델당 최대 2회 시도
+            try:
+                logger.info(f"Gemini API 호출 시도 (모델: {model_name}, 시도: {attempt + 1}/2)...")
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config={
+                        "system_instruction": system_instruction,
+                        "temperature": 0.4
+                    }
+                )
+                generated_quiz = response.text
+                if generated_quiz and len(generated_quiz.strip()) > 0:
+                    logger.info(f"Gemini API 응답 성공 (모델: {model_name}, 글자수: {len(generated_quiz)}자)")
+                    return generated_quiz
+                else:
+                    logger.warning(f"모델 {model_name}에서 빈 응답이 반환되었습니다.")
+            except Exception as e:
+                err_str = str(e)
+                last_error = e
+                is_transient = any(kw in err_str.lower() for kw in ["503", "unavailable", "429", "high demand", "overloaded"])
+                logger.warning(f"모델 {model_name} 호출 실패 (시도 {attempt + 1}): {err_str}")
+                if is_transient:
+                    time.sleep(1.2)
+                    continue
+                else:
+                    break
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("모든 AI 모델에서 응답을 생성하지 못했습니다.")
 
 
 @app.route("/generate", methods=["POST"])
@@ -258,35 +308,32 @@ def generate_quiz():
 {context_text}
 """
 
-    # 6. Gemini API 호출
+    # 6. Gemini API 호출 (다중 후보 모델 폴백 및 자동 재시도)
     try:
-        logger.info("Gemini API 호출 시작 (모델: gemini-3.8-flash)...")
         client = genai.Client(api_key=api_key)
+        generated_quiz = generate_quiz_with_fallback(client, prompt, system_instruction)
 
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt,
-            config={
-                "system_instruction": system_instruction,
-                "temperature": 0.4
-            }
-        )
-
-        generated_quiz = response.text
-        if not generated_quiz:
-            raise ValueError("Gemini API에서 빈 응답이 반환되었습니다.")
-
-        logger.info(f"Gemini API 응답 성공 (생성된 글자수: {len(generated_quiz)}자)")
         return jsonify({
             "success": True,
             "quiz": generated_quiz
         })
 
     except Exception as e:
-        logger.error(f"Gemini API 호출 중 오류 발생: {str(e)}", exc_info=True)
+        err_msg = str(e)
+        logger.error(f"Gemini API 호출 중 최종 오류 발생: {err_msg}", exc_info=True)
+
+        if any(kw in err_msg.lower() for kw in ["503", "unavailable", "high demand", "overloaded"]):
+            user_error = "Google AI 서버에 일시적인 접속량 급증(503)이 발생했습니다. 10~20초 후 다시 시도해 주세요."
+        elif any(kw in err_msg.lower() for kw in ["429", "resource_exhausted"]):
+            user_error = "Gemini API 무료 요청 한도를 일시 초과했습니다. 잠시 후 다시 시도해 주세요."
+        elif any(kw in err_msg.lower() for kw in ["api_key_invalid", "403"]):
+            user_error = "Gemini API 키가 유효하지 않거나 권한이 없습니다. 환경변수 GEMINI_API_KEY를 확인해 주세요."
+        else:
+            user_error = f"AI 퀴즈 생성 중 오류가 발생했습니다: {err_msg}"
+
         return jsonify({
             "success": False,
-            "error": f"AI 퀴즈 생성 중 오류가 발생했습니다: {str(e)}"
+            "error": user_error
         }), 500
 
 
