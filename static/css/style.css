@@ -731,19 +731,19 @@ body {
     user-select: none;
 }
 
-/* '[]' 안에 들어간 문장에 적용되는 빨간색 형광펜 표시 (글씨가 잘 보이도록 반투명 형광 레드) */
+/* '[]' 안에 들어간 정답 문장에 적용되는 반투명 형광 레드 틴트 형광펜 마킹 */
 .highlight-answer,
 .highlight-answer-full,
 mark.highlight-answer,
 .quiz-result-content mark {
-    background-color: rgba(255, 75, 110, 0.22) !important;
-    background: linear-gradient(to top, rgba(255, 75, 110, 0.22) 100%, transparent 0%) !important;
+    background-color: rgba(244, 63, 94, 0.22) !important;
+    background: linear-gradient(to top, rgba(244, 63, 94, 0.22) 100%, transparent 0%) !important;
     color: #881337 !important; /* 선명한 딥 버건디 톤으로 글씨 시인성 보장 */
     font-weight: 700 !important;
     padding: 3px 8px;
     border-radius: 4px;
     display: inline;
-    border-left: 3.5px solid #f43f5e;
+    border-left: 4px solid #f43f5e;
     line-height: 1.75;
     word-break: break-word;
     overflow-wrap: break-word;

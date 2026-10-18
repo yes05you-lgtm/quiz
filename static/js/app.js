@@ -408,36 +408,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (rawLines.length === 0) return;
 
-            // 1. 정답 번호 탐색
+            // 1. 정답 번호 탐색 (우선순위 4단계)
             let correctNum = "";
 
-            // 1-1. mark 태그 또는 highlight-answer가 포함된 줄에서 정답 번호 탐지
-            for (const line of rawLines) {
-                if (/<mark|highlight-answer/i.test(line)) {
-                    const m = line.match(/([①②③④⑤]|[1-5])/);
-                    if (m) {
-                        correctNum = numMap[m[1]] || m[1];
-                        break;
-                    }
-                }
+            // 1-1. 전체 details 텍스트에서 명시적 정답 탐색 (예: "정답: ③", "[정답: 3]", "정답 ③")
+            const fullText = details.textContent;
+            const explicitMatch = fullText.match(/(?:정답|답안|정답번호)\s*[:：]?\s*([①②③④⑤]|\([1-5]\)|[1-5]번|[1-5])/i);
+            if (explicitMatch) {
+                const val = explicitMatch[1].replace(/번$/, "").replace(/[()]/g, "").trim();
+                correctNum = numMap[val] || val;
             }
 
-            // 1-2. '정답 : ③' 같은 명시적 정답 텍스트가 있는 줄에서 정답 번호 탐지
+            // 1-2. mark 태그 또는 highlight-answer가 포함된 줄에서 정답 번호 탐색
             if (!correctNum) {
                 for (const line of rawLines) {
-                    const m = line.match(/(?:정답|답안)\s*[:：]?\s*([①②③④⑤]|\([1-5]\)|[1-5]번|[1-5])/i);
-                    if (m) {
-                        const val = m[1].replace(/번$/, "").replace(/[()]/g, "").trim();
-                        correctNum = numMap[val] || val;
-                        break;
-                    }
-                }
-            }
-
-            // 1-3. '(정답)' 또는 '[정답]' 키워드가 들어간 줄에서 정답 번호 탐지
-            if (!correctNum) {
-                for (const line of rawLines) {
-                    if (/[\(\[]\s*정답\s*[\)\]]|정답입니다/i.test(line)) {
+                    if (/<mark|highlight-answer/i.test(line)) {
                         const m = line.match(/([①②③④⑤]|[1-5])/);
                         if (m) {
                             correctNum = numMap[m[1]] || m[1];
@@ -447,19 +432,54 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
 
+            // 1-3. '(정답)' 또는 '[정답]' 키워드가 들어간 줄에서 정답 번호 탐색
+            if (!correctNum) {
+                for (const line of rawLines) {
+                    if (/[\(\[]\s*정답\s*[\)\]]|정답입니다|가\s*정답|옳은\s*답/i.test(line)) {
+                        const m = line.match(/([①②③④⑤]|[1-5])/);
+                        if (m) {
+                            correctNum = numMap[m[1]] || m[1];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 1-4. AI 설명 문맥 분석 폴백 (옳은 설명 vs 틀린/오답 분석)
+            if (!correctNum) {
+                let bestCandidate = "";
+                let maxScore = -999;
+                for (const line of rawLines) {
+                    const optM = line.match(/^\[?\s*([①②③④⑤]|[1-5])/);
+                    if (!optM) continue;
+                    const optSym = numMap[optM[1]] || optM[1];
+                    let score = 0;
+                    if (/(?:올바른|옳은|부합|일치|적절한|정답|맞는)/i.test(line)) score += 3;
+                    if (/(?:틀렸|옳지\s*않|아닙니다|아니라|오답|잘못|부적절|불일치)/i.test(line)) score -= 3;
+                    if (score > maxScore) {
+                        maxScore = score;
+                        bestCandidate = optSym;
+                    }
+                }
+                if (maxScore > 0) {
+                    correctNum = bestCandidate;
+                }
+            }
+
             // 2. 각 줄을 [ 번호 : 해설 ] 카드로 파싱
             const cardsHtml = [];
 
             for (const line of rawLines) {
                 // 단독 '정답: X' 라인은 카드에 중복 표시하지 않고 건너뜀 (정답 카드의 '정답' 뱃지로 표기)
-                if (/^(?:정답|답안)\s*[:：]\s*[^\n]+$/i.test(line.replace(/<[^>]+>/g, "").trim())) {
+                const plainLine = line.replace(/<[^>]+>/g, "").trim();
+                if (/^(?:정답|답안)\s*[:：]?\s*[①②③④⑤1-5번\(\)]+$/i.test(plainLine)) {
                     continue;
                 }
 
                 const isMarked = /<mark|highlight-answer/i.test(line);
                 const cleanLine = line.replace(/<\/?mark[^>]*>/gi, "").trim();
 
-                // 문항 번호 패턴 매칭: [ ① : 해설 ], ① : 해설, ① 해설, 1. 해설 등
+                // 문항 번호 패턴 매칭: [ ① : 해설 ], ① : 해설, ①: 해설, ① 해설, 1. 해설 등
                 const optMatch = cleanLine.match(/^\[?\s*([①②③④⑤]|[1-5])(?:\.|\:|\)|\]|\s*:|\s*-)?\s*\]?\s*[:：\-]?\s*(.*)$/);
 
                 if (optMatch) {
@@ -473,11 +493,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                     // 앞에 남은 콜론 제거
                     expText = expText.replace(/^[:：\-]\s*/, "");
-                    // 본문 안의 (정답) 텍스트 제거
+                    // 본문 안의 (정답) 마커 제거하여 깔끔한 해설 유지
                     expText = expText.replace(/[\(\[]\s*정답\s*[\)\]]/gi, "").trim();
 
-                    // 정답 여부 판정
-                    const isCorrect = isMarked || (sym === correctNum) || /정답입니다/i.test(line);
+                    // 정답 여부 판정 (100% 확정)
+                    const isCorrect = isMarked || (sym === correctNum) || /정답입니다|가\s*정답/i.test(line);
 
                     const bracketContent = `[ ${sym} : ${expText} ]`;
 
