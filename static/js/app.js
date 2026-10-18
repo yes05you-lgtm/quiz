@@ -190,6 +190,14 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        // 총 파일 용량 체크 (Vercel 서버리스 페이로드 한도: 4.5MB)
+        const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+        const MAX_TOTAL_SIZE = 4.5 * 1024 * 1024; // 4.5MB
+        if (totalSize > MAX_TOTAL_SIZE) {
+            showError(`선택한 PDF 파일들의 총 용량(${formatBytes(totalSize)})이 서버리스 업로드 한도(4.5MB)를 초과합니다. 4.5MB 이하로 나누거나 압축해 주세요.`);
+            return;
+        }
+
         const numQuestionsInput = document.getElementById("num_questions");
         const numQuestions = parseInt(numQuestionsInput.value, 10);
         if (isNaN(numQuestions) || numQuestions < 1 || numQuestions > 30) {
@@ -216,7 +224,23 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: formData
             });
 
-            const data = await response.json();
+            // 응답 헤더 확인: JSON 여부에 따라 안전하게 분기
+            let data;
+            const contentType = response.headers.get("content-type") || "";
+
+            if (contentType.includes("application/json")) {
+                data = await response.json();
+            } else {
+                // Vercel 타임아웃(504), 용량초과(413) 등 HTML 에러 응답 처리
+                const text = await response.text();
+                if (response.status === 504) {
+                    throw new Error("서버 응답 시간 초과(504 Gateway Timeout). AI 문서 분석에 시간이 초과되었습니다. 문항 수를 줄이거나 PDF 페이지를 줄여 다시 시도해 주세요.");
+                } else if (response.status === 413) {
+                    throw new Error("업로드 용량 초과(413 Payload Too Large). Vercel 서버리스는 총 4.5MB 이하만 업로드 가능합니다.");
+                } else {
+                    throw new Error(`서버 응답 오류 (HTTP ${response.status}): ${text.slice(0, 120) || "서버에서 오류가 발생했습니다."}`);
+                }
+            }
 
             if (!response.ok || !data.success) {
                 const errorMsg = data.error || `서버 오류가 발생했습니다. (상태 코드: ${response.status})`;
@@ -230,8 +254,12 @@ document.addEventListener("DOMContentLoaded", () => {
             renderQuizResult(currentMarkdownText);
 
         } catch (err) {
-            console.error("퀴즈 생성 요청 실패:", err);
-            showError("네트워크 오류 또는 서버 응답 실패가 발생했습니다. 인터넷 연결을 확인해 주세요.");
+            console.error("퀴즈 생성 요청 실패 상세:", err);
+            let userMessage = err.message || "알 수 없는 오류가 발생했습니다.";
+            if (userMessage.includes("Failed to fetch") || userMessage.includes("NetworkError")) {
+                userMessage = "서버와 통신할 수 없습니다. 로컬 서버(python app.py)가 실행 중인지 또는 인터넷 연결을 확인해 주세요.";
+            }
+            showError(userMessage);
             showEmptyState();
         } finally {
             setLoading(false);

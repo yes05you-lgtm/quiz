@@ -64,6 +64,22 @@ def service_worker():
     return response
 
 
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    return jsonify({
+        "success": False,
+        "error": "업로드한 파일 용량이 너무 큽니다. 더 작은 PDF를 업로드해 주세요."
+    }), 413
+
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    return jsonify({
+        "success": False,
+        "error": "서버 내부 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+    }), 500
+
+
 @app.route("/generate", methods=["POST"])
 def generate_quiz():
     """PDF 파일(최대 5개)과 퀴즈 옵션을 받아 Gemini API로 퀴즈를 생성하는 REST API 라우트"""
