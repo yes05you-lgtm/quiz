@@ -9,6 +9,18 @@ if root_dir not in sys.path:
 
 from app import app
 
-# Vercel이 감지하는 WSGI 애플리케이션 핸들러
-app = app
+# Vercel 서버리스 환경에서 PATH_INFO가 /api/index 또는 /api/index.py로 전달되는 문제를 보정하는 WSGI 미들웨어
+class VercelPathFixMiddleware:
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        path = environ.get("PATH_INFO", "")
+        for prefix in ["/api/index.py", "/api/index"]:
+            if path.startswith(prefix):
+                environ["PATH_INFO"] = path[len(prefix):] or "/"
+                break
+        return self.wsgi_app(environ, start_response)
+
+app.wsgi_app = VercelPathFixMiddleware(app.wsgi_app)
 handler = app

@@ -42,6 +42,8 @@ ALLOWED_DIFFICULTIES = {
 
 
 @app.route("/")
+@app.route("/api/index")
+@app.route("/api/index.py")
 def index():
     """메인 페이지 라우트"""
     return render_template("index.html")
