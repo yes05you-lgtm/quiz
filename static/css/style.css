@@ -439,7 +439,9 @@ body {
 
 .result-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
+    align-items: center;
 }
 
 .empty-state,
@@ -511,6 +513,9 @@ body {
 
 .quiz-result-content p {
     margin-bottom: 12px;
+    text-align: left;
+    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 .quiz-result-content details {

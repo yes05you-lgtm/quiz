@@ -25,7 +25,24 @@ document.addEventListener("DOMContentLoaded", () => {
     const quizResult = document.getElementById("quiz-result");
     const resultActions = document.getElementById("result-actions");
     const copyBtn = document.getElementById("copy-btn");
+    const copyAnswersBtn = document.getElementById("copy-answers-btn");
     const downloadPdfBtn = document.getElementById("download-pdf-btn");
+
+    // marked.js 줄바꿈 및 GFM 활성화 (보기가 한 줄로 뭉쳐 나오는 현상 방지)
+    if (window.marked && typeof window.marked.setOptions === "function") {
+        window.marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+    }
+
+    // 객관식 보기 번호가 한 줄에 붙어 있는 경우 개별 줄로 분리하여 무조건 왼쪽 정렬 보장
+    function ensureOptionsNewline(text) {
+        if (!text) return "";
+        let formatted = text.replace(/([^\n])\s*([①②③④⑤])/g, "$1\n\n$2");
+        formatted = formatted.replace(/([^\n])\s*(\([1-5]\))\s+/g, "$1\n\n$2 ");
+        return formatted;
+    }
 
     // 최신 생성된 원본 Markdown 텍스트 저장용 변수
     let currentMarkdownText = "";
@@ -245,9 +262,11 @@ document.addEventListener("DOMContentLoaded", () => {
         emptyState.classList.add("hidden");
         loadingState.classList.add("hidden");
 
+        const formatted = ensureOptionsNewline(markdownText);
+
         // marked.js 라이브러리를 통해 Markdown을 HTML로 파싱
         if (window.marked && typeof window.marked.parse === "function") {
-            quizResult.innerHTML = window.marked.parse(markdownText);
+            quizResult.innerHTML = window.marked.parse(formatted);
         } else {
             // fallback: 일반 텍스트 보존 표시
             quizResult.innerHTML = `<pre style="white-space: pre-wrap;">${escapeHtml(markdownText)}</pre>`;
@@ -320,15 +339,118 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // 정답 및 해설만 모아서 복사 (문제번호, 문제, 정답, 해설)
+    copyAnswersBtn.addEventListener("click", async () => {
+        if (!currentMarkdownText) return;
+
+        const answersOnlyText = extractAnswersOnly(currentMarkdownText);
+        if (!answersOnlyText) {
+            alert("복사할 정답 및 해설 데이터가 없습니다.");
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(answersOnlyText);
+            const originalText = copyAnswersBtn.innerHTML;
+            copyAnswersBtn.innerHTML = "✅ 정답·해설 복사 완료!";
+            copyAnswersBtn.disabled = true;
+
+            setTimeout(() => {
+                copyAnswersBtn.innerHTML = originalText;
+                copyAnswersBtn.disabled = false;
+            }, 2000);
+        } catch (err) {
+            console.error("정답 및 해설 복사 실패:", err);
+            alert("클립보드 복사에 실패했습니다. 권한을 확인해 주세요.");
+        }
+    });
+
+    // 문제번호, 문제, 정답, 해설만 추출하는 헬퍼 함수
+    function extractAnswersOnly(markdown) {
+        if (!markdown) return "";
+
+        // details 태그가 없는 경우
+        if (!markdown.includes("<details")) {
+            return markdown;
+        }
+
+        // 문제 단위 분할 (### 문제 N 등)
+        const blocks = markdown.split(/(?=(?:^|\n)#{1,4}\s*문제\s*\d+)/g);
+        const results = [];
+
+        blocks.forEach((block) => {
+            const trimmed = block.trim();
+            if (!trimmed) return;
+
+            // <details>...</details> 매칭
+            const detailsMatch = trimmed.match(/<details[^>]*>([\s\S]*?)<\/details>/i);
+            if (!detailsMatch) return;
+
+            // 질문 부분 추출 (<details 이전까지)
+            let questionPart = trimmed.split(/<details/i)[0];
+
+            // 객관식 보기 기호(①~⑤, (1)~(5))가 시작하는 위치 전까지만 질문으로 추출
+            const choiceIndex = questionPart.search(/(?:^|\n)\s*(?:[①②③④⑤]|\([1-5]\))/);
+            if (choiceIndex !== -1) {
+                questionPart = questionPart.substring(0, choiceIndex);
+            }
+
+            // 마크다운 헤더 기호(### 등) 및 구분선(---) 제거
+            questionPart = questionPart
+                .replace(/^#+\s*/gm, "")
+                .replace(/^---\s*$/gm, "")
+                .trim();
+
+            // details 내부 정답 및 해설 텍스트 정제
+            let detailsContent = detailsMatch[1];
+            detailsContent = detailsContent.replace(/<summary[\s\S]*?<\/summary>/gi, "");
+            detailsContent = detailsContent.replace(/<\/?[^>]+(>|$)/g, ""); // HTML 태그 제거
+
+            // 빈 줄 정리
+            const cleanedDetails = detailsContent
+                .split("\n")
+                .map(line => line.trimEnd())
+                .filter((line, idx, arr) => line.trim() !== "" || (idx > 0 && arr[idx - 1].trim() !== ""))
+                .join("\n")
+                .trim();
+
+            if (questionPart && cleanedDetails) {
+                results.push(`${questionPart}\n${cleanedDetails}`);
+            } else if (cleanedDetails) {
+                results.push(cleanedDetails);
+            }
+        });
+
+        if (results.length === 0) {
+            // 폴백: split으로 매칭되지 않는 형식일 경우 순수 details 블록 추출
+            const allDetails = [];
+            const regex = /<details[^>]*>([\s\S]*?)<\/details>/gi;
+            let match;
+            let qNum = 1;
+            while ((match = regex.exec(markdown)) !== null) {
+                let inner = match[1].replace(/<summary[\s\S]*?<\/summary>/gi, "");
+                inner = inner.replace(/<\/?[^>]+(>|$)/g, "").trim();
+                if (inner) {
+                    allDetails.push(`[문제 ${qNum}]\n${inner}`);
+                    qNum++;
+                }
+            }
+            return allDetails.join("\n\n---\n\n");
+        }
+
+        return results.join("\n\n---\n\n");
+    }
+
     downloadPdfBtn.addEventListener("click", async () => {
         if (!currentMarkdownText) return;
 
-        // 원본 Markdown을 파싱하여 임시 DOM 객체 생성
+        // 원본 Markdown을 파싱하여 임시 DOM 객체 생성 (보기 줄바꿈 보장)
         const tempDiv = document.createElement("div");
+        const formatted = ensureOptionsNewline(currentMarkdownText);
         if (window.marked && typeof window.marked.parse === "function") {
-            tempDiv.innerHTML = window.marked.parse(currentMarkdownText);
+            tempDiv.innerHTML = window.marked.parse(formatted);
         } else {
-            tempDiv.innerHTML = `<p>${escapeHtml(currentMarkdownText)}</p>`;
+            tempDiv.innerHTML = `<p>${escapeHtml(formatted)}</p>`;
         }
 
         // 1. PDF 출력 전용 컨테이너 생성
