@@ -74,22 +74,6 @@ def service_worker():
     return response
 
 
-@app.errorhandler(413)
-def request_entity_too_large(error):
-    return jsonify({
-        "success": False,
-        "error": "업로드한 파일 용량이 너무 큽니다. 더 작은 PDF를 업로드해 주세요."
-    }), 413
-
-
-@app.errorhandler(500)
-def internal_server_error(error):
-    return jsonify({
-        "success": False,
-        "error": "서버 내부 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
-    }), 500
-
-
 def generate_quiz_with_fallback(client, prompt, system_instruction):
     """
     503 UNAVAILABLE(트래픽 급증) 또는 429(속도 제한) 발생 시
@@ -97,7 +81,7 @@ def generate_quiz_with_fallback(client, prompt, system_instruction):
     """
     last_error = None
     for model_name in CANDIDATE_MODELS:
-        for attempt in range(2):  # 각 모델당 최대 2회 시도
+        for attempt in range(2):
             try:
                 logger.info(f"Gemini API 호출 시도 (모델: {model_name}, 시도: {attempt + 1}/2)...")
                 response = client.models.generate_content(
@@ -254,52 +238,18 @@ def generate_quiz():
 - 언어: 한국어
 - 출력 포맷: 깔끔하고 가독성 높은 Markdown 문법 사용
 
-[객관식 보기 출력 필수 규칙 - 줄글 나열 절대 금지]
-- 문제 유형이 객관식인 경우, 보기 ①, ②, ③, ④, ⑤는 반드시 한 줄에 하나씩 개별 줄로 줄바꿈하여 작성하세요.
-- 여러 보기를 줄글 형태로 한 줄에 이어서 쓰는 것을 엄격히 금지합니다.
-- 각 보기는 반드시 줄의 맨 왼쪽에서 원문자 번호(①, ②, ③, ④, ⑤)로 시작해야 합니다.
-  올바른 작성 형식:
-  ### 문제 1. [문제 질문]
-  ① [첫 번째 보기 내용]
-  ② [두 번째 보기 내용]
-  ③ [세 번째 보기 내용]
-  ④ [네 번째 보기 내용]
-  ⑤ [다섯 번째 보기 내용]
-
-[<보기>, <예시>, 지문 출력 및 배치 필수 규칙]
-- 문제에 <보기>, <예시>, [지문], <사례> 등이 있는 경우, 반드시 [문제 질문]이 끝난 다음(선택지 ①~⑤가 나오기 직전)에 배치해야 합니다.
-- 절대 문제 질문 앞에 쓰거나 질문 제목 안에 넣지 마세요.
-- 코드 블록(```)을 사용하지 말고 반드시 다음과 같이 작성하세요:
-<div class="quiz-passage-box">
-<b>&lt;보기&gt;</b>
-ㄱ. [내용 1]
-ㄴ. [내용 2]
-ㄷ. [내용 3]
-</div>
-
-[정답 및 해설 출력 필수 규칙]
-- <details> 안에 정답과 각 보기별 해설을 반드시 아래 형식으로만 작성하세요.
-- 대괄호([ ])나 HTML 태그(<mark> 등), 형광펜 표시는 절대 사용하지 마세요.
-- 첫 줄에 반드시 '정답 : [정답 번호]' (예: 정답 : ③)를 적으세요.
-- 그 아래 줄부터 각 보기 번호와 해설을 '문항번호 : 해설' 형식으로 한 줄씩 작성하세요:
-
 [문항별 출력 형식 필수 요구사항]
 각 문제는 아래 형식을 엄격히 지켜 작성해 주세요.
 
 ### 문제 [번호]. [문제 질문]
-(문제에 <보기>나 <예시>가 있는 경우, 반드시 질문이 끝난 바로 다음 여기에 <div class="quiz-passage-box">...</div> 배치)
-(그 다음 객관식인 경우 ①~⑤ 보기를 한 줄씩 줄바꿈하여 왼쪽 정렬로 나열)
+(문제 유형이 객관식인 경우 각 보기를 ①, ②, ③, ④, ⑤ 형식으로 줄바꿈하여 나열)
 (문제 유형이 주관식/서술형인 경우 답변 작성 가이드 명시)
 
 <details>
 <summary><b>정답 및 해설 보기 (클릭)</b></summary>
 
-정답 : ③
-① : 1번 보기 해설: 본문 내용에 근거한 상세 설명
-② : 2번 보기 해설: 본문 내용에 근거한 상세 설명
-③ : 3번 보기 해설: 본문 근거에 따라 왜 정답인지 상세 설명
-④ : 4번 보기 해설: 본문 내용에 근거한 상세 설명
-⑤ : 5번 보기 해설: 본문 내용에 근거한 상세 설명
+- **정답**: [명확한 정답 표기]
+- **해설**: [해당 답이 정답인 이유와 본문 근거 상세 설명]
 </details>
 
 ---

@@ -1,8 +1,8 @@
-const CACHE_NAME = 'ai-quiz-cache-v7';
+const CACHE_NAME = 'ai-quiz-cache-v8';
 const STATIC_ASSETS = [
   '/',
-  '/static/css/style.css?v=7.0',
-  '/static/js/app.js?v=7.0',
+  '/static/css/style.css?v=8.0',
+  '/static/js/app.js?v=8.0',
   '/static/manifest.json',
   '/static/icons/icon-192.svg',
   '/static/icons/icon-512.svg'

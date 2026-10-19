@@ -25,16 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const quizResult = document.getElementById("quiz-result");
     const resultActions = document.getElementById("result-actions");
     const copyBtn = document.getElementById("copy-btn");
-    const copyAnswersBtn = document.getElementById("copy-answers-btn");
     const downloadPdfBtn = document.getElementById("download-pdf-btn");
-
-    // marked.js 줄바꿈 및 GFM 옵션 활성화 (보기가 한 줄로 뭉쳐 나오는 현상 방지)
-    if (window.marked && typeof window.marked.setOptions === "function") {
-        window.marked.setOptions({
-            breaks: true,
-            gfm: true
-        });
-    }
 
     // 최신 생성된 원본 Markdown 텍스트 저장용 변수
     let currentMarkdownText = "";
@@ -199,14 +190,6 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // 총 파일 용량 체크 (Vercel 서버리스 페이로드 한도: 4.5MB)
-        const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
-        const MAX_TOTAL_SIZE = 4.5 * 1024 * 1024; // 4.5MB
-        if (totalSize > MAX_TOTAL_SIZE) {
-            showError(`선택한 PDF 파일들의 총 용량(${formatBytes(totalSize)})이 서버리스 업로드 한도(4.5MB)를 초과합니다. 4.5MB 이하로 나누거나 압축해 주세요.`);
-            return;
-        }
-
         const numQuestionsInput = document.getElementById("num_questions");
         const numQuestions = parseInt(numQuestionsInput.value, 10);
         if (isNaN(numQuestions) || numQuestions < 1 || numQuestions > 30) {
@@ -233,23 +216,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: formData
             });
 
-            // 응답 헤더 확인: JSON 여부에 따라 안전하게 분기
-            let data;
-            const contentType = response.headers.get("content-type") || "";
-
-            if (contentType.includes("application/json")) {
-                data = await response.json();
-            } else {
-                // Vercel 타임아웃(504), 용량초과(413) 등 HTML 에러 응답 처리
-                const text = await response.text();
-                if (response.status === 504) {
-                    throw new Error("서버 응답 시간 초과(504 Gateway Timeout). AI 문서 분석에 시간이 초과되었습니다. 문항 수를 줄이거나 PDF 페이지를 줄여 다시 시도해 주세요.");
-                } else if (response.status === 413) {
-                    throw new Error("업로드 용량 초과(413 Payload Too Large). Vercel 서버리스는 총 4.5MB 이하만 업로드 가능합니다.");
-                } else {
-                    throw new Error(`서버 응답 오류 (HTTP ${response.status}): ${text.slice(0, 120) || "서버에서 오류가 발생했습니다."}`);
-                }
-            }
+            const data = await response.json();
 
             if (!response.ok || !data.success) {
                 const errorMsg = data.error || `서버 오류가 발생했습니다. (상태 코드: ${response.status})`;
@@ -263,12 +230,8 @@ document.addEventListener("DOMContentLoaded", () => {
             renderQuizResult(currentMarkdownText);
 
         } catch (err) {
-            console.error("퀴즈 생성 요청 실패 상세:", err);
-            let userMessage = err.message || "알 수 없는 오류가 발생했습니다.";
-            if (userMessage.includes("Failed to fetch") || userMessage.includes("NetworkError")) {
-                userMessage = "서버와 통신할 수 없습니다. 로컬 서버(python app.py)가 실행 중인지 또는 인터넷 연결을 확인해 주세요.";
-            }
-            showError(userMessage);
+            console.error("퀴즈 생성 요청 실패:", err);
+            showError("네트워크 오류 또는 서버 응답 실패가 발생했습니다. 인터넷 연결을 확인해 주세요.");
             showEmptyState();
         } finally {
             setLoading(false);
@@ -276,364 +239,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // -------------------------------------------------------------------------
-    // 3. 결과 렌더링 및 객관식/보기 박스 포맷 최적화 함수
+    // 3. 결과 렌더링 및 상태 제어 함수
     // -------------------------------------------------------------------------
-    function formatQuizMarkdown(text) {
-        if (!text) return "";
-
-        // 1. 코드 블록(```)으로 감싸진 <보기>, [보기], <예시>, [예시]를 quiz-passage-box로 변환 (폰트 깨짐 및 글씨 잘림 방지)
-        let formatted = text.replace(/```(?:text|markdown)?\s*([<\[]?(?:보기|예시|지문|사례)[>\]]?[\s\S]*?)```/gi, (match, p1) => {
-            return `<div class="quiz-passage-box">\n${p1.trim()}\n</div>`;
-        });
-
-        // 2. HTML 태그 형태 <보기>...</보기>, <예시>...</예시>를 quiz-passage-box로 변환
-        formatted = formatted.replace(/<보기>([\s\S]*?)<\/보기>/gi, (match, p1) => {
-            return `<div class="quiz-passage-box"><b>&lt;보기&gt;</b>\n${p1.trim()}</div>`;
-        });
-        formatted = formatted.replace(/<예시>([\s\S]*?)<\/예시>/gi, (match, p1) => {
-            return `<div class="quiz-passage-box"><b>&lt;예시&gt;</b>\n${p1.trim()}</div>`;
-        });
-
-        // 3. 단독 줄에 위치한 <보기>, [보기], <예시>, [예시] 블록을 quiz-passage-box로 묶어 변환
-        formatted = formatted.replace(
-            /(?:^|\n)\s*([<\[](?:보기|예시|지문|사례)[>\]])\s*\n+((?:(?!\n\s*(?:[①②③④⑤]|###|<details>|---))\S[^\n]*\n*)+)/gi,
-            (match, title, body) => {
-                const cleanTitle = title.replace(/[<\[>\]]/g, "").trim();
-                return `\n<div class="quiz-passage-box"><b>&lt;${cleanTitle}&gt;</b>\n${body.trim()}</div>\n\n`;
-            }
-        );
-
-        // 4. 문장 속 인라인 <보기>, <예시> 등이 브라우저의 태그 파싱으로 인해 숨겨지지 않도록 엔티티 치환
-        formatted = formatted.replace(/<((?:보기|예시|사례|지문))>/gi, '&lt;$1&gt;');
-
-        // 5. <보기>나 <예시> 박스가 질문(### 문제 X.) 앞에 위치한 경우: 질문 뒤로 위치 교정
-        formatted = formatted.replace(
-            /(<div class="quiz-passage-box">[\s\S]*?<\/div>)\s*\n+(###?\s*문제\s*\d+[^\n]*)/gi,
-            '$2\n\n$1\n\n'
-        );
-
-        // 6. 객관식 보기 번호(①~⑤)가 줄 중간에 붙어 있는 경우 강제로 줄바꿈 삽입
-        formatted = formatted.replace(/([^\n])\s*([①②③④⑤])/g, "$1\n\n$2");
-        // 7. 1), 2) 등 괄호형 번호가 줄 중간에 있는 경우도 줄바꿈 삽입
-        formatted = formatted.replace(/([^\n])\s*(\([1-5]\)|[1-5]\))\s+/g, "$1\n\n$2 ");
-
-        return formatted;
-    }
-
-    function beautifyQuizPassages(container) {
-        if (!container) return;
-        // pre, blockquote 태그가 있으면 글씨체 깨짐 방지 및 가로 스크롤 잘림 방지 클래스 적용
-        container.querySelectorAll("pre, blockquote").forEach((el) => {
-            el.classList.add("quiz-passage-box");
-        });
-    }
-
-    function beautifyQuizOptions(container) {
-        if (!container) return;
-        const paragraphs = container.querySelectorAll("p");
-        paragraphs.forEach((p) => {
-            if (/[①②③④⑤]/.test(p.innerHTML)) {
-                const lines = p.innerHTML.split(/<br\s*\/?>|\n/i);
-                const hasOption = lines.some((line) => /^\s*[①②③④⑤]/.test(line.trim()));
-                if (hasOption) {
-                    const optionsHtml = [];
-                    const leadingTexts = [];
-                    let isOptionStarted = false;
-
-                    lines.forEach((line) => {
-                        const trimmed = line.trim();
-                        const match = trimmed.match(/^([①②③④⑤])\s*(.*)$/);
-                        if (match) {
-                            isOptionStarted = true;
-                            optionsHtml.push(
-                                `<div class="quiz-option-item"><span class="quiz-option-num">${match[1]}</span><span class="quiz-option-text">${match[2]}</span></div>`
-                            );
-                        } else if (!isOptionStarted && trimmed) {
-                            leadingTexts.push(line);
-                        } else if (trimmed) {
-                            if (optionsHtml.length > 0) {
-                                const lastIdx = optionsHtml.length - 1;
-                                optionsHtml[lastIdx] = optionsHtml[lastIdx].replace(
-                                    /<\/div>$/,
-                                    ` ${trimmed}</div>`
-                                );
-                            } else {
-                                leadingTexts.push(line);
-                            }
-                        }
-                    });
-
-                    let replacement = "";
-                    if (leadingTexts.length > 0) {
-                        replacement += `<p>${leadingTexts.join("<br>")}</p>`;
-                    }
-                    if (optionsHtml.length > 0) {
-                        replacement += `<div class="quiz-options-group">${optionsHtml.join("")}</div>`;
-                    }
-
-                    if (replacement) {
-                        const wrapper = document.createElement("div");
-                        wrapper.innerHTML = replacement;
-                        p.parentNode.replaceChild(wrapper, p);
-                    }
-                }
-            }
-        });
-    }
-
-    // 정답 및 해설 포맷팅:
-    // 정답 : 몇번
-    // 문항번호 : 해설
-    // (대괄호 [ ] 및 형광펜 없이 깔끔하게 표기)
-    function beautifyQuizExplanations(container) {
-        if (!container) return;
-        const detailsList = container.querySelectorAll("details");
-        const numMap = { "1": "①", "2": "②", "3": "③", "4": "④", "5": "⑤" };
-
-        detailsList.forEach((details) => {
-            const summary = details.querySelector("summary");
-            const summaryHtml = summary ? summary.outerHTML : "<summary><b>정답 및 해설 보기 (클릭)</b></summary>";
-
-            const clone = details.cloneNode(true);
-            const cloneSummary = clone.querySelector("summary");
-            if (cloneSummary) cloneSummary.remove();
-
-            // 줄바꿈 및 블록 태그를 \n으로 정규화
-            let innerHtml = clone.innerHTML;
-            innerHtml = innerHtml.replace(/<\/?(?:p|div|li)[^>]*>/gi, "\n");
-            innerHtml = innerHtml.replace(/<br\s*\/?>/gi, "\n");
-
-            const rawLines = innerHtml
-                .split("\n")
-                .map((l) => l.trim())
-                .filter(Boolean);
-
-            if (rawLines.length === 0) return;
-
-            // 1. 정답 번호 탐색
-            let answerDisplay = "";
-
-            // 1-1. 전체 details 텍스트에서 명시적 정답 탐색
-            const fullText = details.textContent;
-            const explicitMatch = fullText.match(/(?:정답|답안|정답번호)\s*[:：]?\s*([①②③④⑤]|\([1-5]\)|[1-5]번|[1-5])/i);
-            if (explicitMatch) {
-                const val = explicitMatch[1].replace(/번$/, "").replace(/[()]/g, "").trim();
-                const sym = numMap[val] || val;
-                answerDisplay = `정답 : ${sym}`;
-            }
-
-            // 1-2. mark 태그에서 정답 번호 탐색
-            if (!answerDisplay) {
-                for (const line of rawLines) {
-                    if (/<mark|highlight-answer/i.test(line)) {
-                        const m = line.match(/([①②③④⑤]|[1-5])/);
-                        if (m) {
-                            const sym = numMap[m[1]] || m[1];
-                            answerDisplay = `정답 : ${sym}`;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // 1-3. '(정답)' 키워드에서 정답 탐색
-            if (!answerDisplay) {
-                for (const line of rawLines) {
-                    if (/[\(\[]\s*정답\s*[\)\]]|정답입니다/i.test(line)) {
-                        const m = line.match(/([①②③④⑤]|[1-5])/);
-                        if (m) {
-                            const sym = numMap[m[1]] || m[1];
-                            answerDisplay = `정답 : ${sym}`;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // 2. 각 라인 파싱 (문항번호 : 해설)
-            const itemLines = [];
-
-            for (const line of rawLines) {
-                // 단독 '정답: X' 라인은 상단 answerDisplay로 통합 표시하므로 본문에서는 건너뜀
-                const plainLine = line.replace(/<[^>]+>/g, "").trim();
-                const isOnlyAnswerLine = /^(?:정답|답안)\s*[:：]?\s*[①②③④⑤1-5번\(\)\s]+$/i.test(plainLine);
-                if (isOnlyAnswerLine) {
-                    if (!answerDisplay) {
-                        const m = plainLine.match(/([①②③④⑤]|[1-5])/);
-                        if (m) {
-                            const sym = numMap[m[1]] || m[1];
-                            answerDisplay = `정답 : ${sym}`;
-                        }
-                    }
-                    continue;
-                }
-
-                // 태그 및 마크다운 표시 제거
-                const cleanLine = line
-                    .replace(/<\/?mark[^>]*>/gi, "")
-                    .replace(/<[^>]+>/g, "")
-                    .trim();
-
-                // 문항 번호 패턴 매칭: [ ① : 해설 ], [①] 해설, ① : 해설, ①: 해설, ① 해설, 1. 해설 등
-                const optMatch = cleanLine.match(/^\[?\s*([①②③④⑤]|[1-5])(?:\.|\:|\)|\]|\s*:|\s*-)?\s*\]?\s*[:：\-]?\s*(.*)$/);
-
-                if (optMatch) {
-                    const rawN = optMatch[1];
-                    const sym = numMap[rawN] || rawN;
-                    let expText = optMatch[2].trim();
-
-                    // 끝에 닫는 대괄호 ']'가 있으면 제거 (앞뒤 [ ] 완전 제거)
-                    if (expText.endsWith("]")) {
-                        expText = expText.slice(0, -1).trim();
-                    }
-                    // 앞에 남은 콜론 제거
-                    expText = expText.replace(/^[:：\-]\s*/, "");
-                    // 본문 안의 (정답) 텍스트 제거
-                    expText = expText.replace(/[\(\[]\s*정답\s*[\)\]]/gi, "").trim();
-
-                    itemLines.push(`<div class="explanation-item-line">${sym} : ${expText}</div>`);
-                } else if (cleanLine) {
-                    // 번호 없는 일반 문단 (주관식/서술형 또는 일반 설명)
-                    itemLines.push(`<div class="explanation-item-line">${cleanLine}</div>`);
-                }
-            }
-
-            let finalHtml = "";
-            if (answerDisplay) {
-                finalHtml += `<div class="explanation-answer-line">${answerDisplay}</div>`;
-            }
-            if (itemLines.length > 0) {
-                finalHtml += itemLines.join("");
-            }
-
-            if (finalHtml) {
-                details.innerHTML = `${summaryHtml}<div class="explanation-box">${finalHtml}</div>`;
-            }
-        });
-    }
-
-    function extractAnswersOnly(markdown) {
-        if (!markdown) return "";
-
-        const tempDiv = document.createElement("div");
-        if (window.marked && typeof window.marked.parse === "function") {
-            tempDiv.innerHTML = window.marked.parse(markdown);
-        } else {
-            tempDiv.innerHTML = markdown;
-        }
-
-        const items = [];
-        const headers = tempDiv.querySelectorAll("h2, h3, h4");
-        const numMap = { "1": "①", "2": "②", "3": "③", "4": "④", "5": "⑤" };
-
-        if (headers.length > 0) {
-            headers.forEach((h) => {
-                const questionTitle = h.textContent.trim();
-                let nextEl = h.nextElementSibling;
-                let detailsEl = null;
-
-                while (nextEl && !["H2", "H3", "H4"].includes(nextEl.tagName)) {
-                    if (nextEl.tagName === "DETAILS") {
-                        detailsEl = nextEl;
-                        break;
-                    }
-                    nextEl = nextEl.nextElementSibling;
-                }
-
-                let answerText = "";
-                let explanationText = "";
-
-                if (detailsEl) {
-                    const clone = detailsEl.cloneNode(true);
-                    const summary = clone.querySelector("summary");
-                    if (summary) summary.remove();
-
-                    const text = clone.textContent.trim();
-
-                    // 1. highlight-answer 또는 mark 태그에서 정답 탐색
-                    const markEl = clone.querySelector("mark, .highlight-answer");
-                    if (markEl) {
-                        const markText = markEl.textContent.trim();
-                        const numM = markText.match(/([①②③④⑤]|[1-5])/);
-                        if (numM) {
-                            answerText = numMap[numM[1]] || numM[1];
-                        }
-                    }
-
-                    // 2. 일반 정답 패턴 탐색
-                    if (!answerText) {
-                        const ansMatch = text.match(/(?:정답|답안)\s*[:：]\s*([^\n\r]+)/i);
-                        if (ansMatch) {
-                            answerText = ansMatch[1].replace(/^[*-•\s]+/, "").trim();
-                        }
-                    }
-
-                    // 3. 각 보기별 해설 텍스트 추출 (앞뒤 [ ] 제거 및 포맷 통일)
-                    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-                    const cleanLines = lines
-                        .filter(l => !/^(?:정답|답안)\s*[:：]/.test(l))
-                        .map(l => {
-                            let clean = l.replace(/^\[\s*/, "").replace(/\s*\]$/, "");
-                            clean = clean.replace(/<\/?mark[^>]*>/gi, "");
-                            return clean;
-                        });
-                    explanationText = cleanLines.join("\n");
-                }
-
-                let itemStr = `[${questionTitle}]\n`;
-                if (answerText) itemStr += `정답 : ${answerText}\n`;
-                if (explanationText) itemStr += `${explanationText}\n`;
-                items.push(itemStr.trim());
-            });
-        }
-
-        // 폴백 정규식 추출
-        if (items.length === 0) {
-            const questionBlocks = markdown.split(/(?=###?\s*문제\s*\d+)/i);
-            for (const block of questionBlocks) {
-                if (!block.trim()) continue;
-                const matchHeader = block.match(/###?\s*(문제\s*\d+[\.\:]?\s*[^\n]+)/i);
-                const matchMark = block.match(/<mark[^>]*>([\s\S]*?)<\/mark>/i);
-                const matchAns = block.match(/(?:정답|답안)\s*[:：]\s*([^\n\r]+)/i);
-                const matchExp = block.match(/<details>([\s\S]*?)<\/details>/i);
-
-                if (matchHeader) {
-                    let blockStr = `[${matchHeader[1].trim()}]\n`;
-                    let ans = "";
-                    if (matchMark) {
-                        const m = matchMark[1].match(/([①②③④⑤]|[1-5])/);
-                        if (m) ans = numMap[m[1]] || m[1];
-                    } else if (matchAns) {
-                        ans = matchAns[1].replace(/<[^>]+>/g, "").trim();
-                    }
-                    if (ans) blockStr += `- 정답: ${ans}\n`;
-                    if (matchExp) {
-                        const cleanExp = matchExp[1]
-                            .replace(/<summary[\s\S]*?<\/summary>/gi, "")
-                            .replace(/<\/?[^>]+(>|$)/g, "")
-                            .trim();
-                        blockStr += `- 해설:\n${cleanExp}\n`;
-                    }
-                    items.push(blockStr.trim());
-                }
-            }
-        }
-
-        return items.join("\n\n");
-    }
-
     function renderQuizResult(markdownText) {
         emptyState.classList.add("hidden");
         loadingState.classList.add("hidden");
 
-        const formattedMarkdown = formatQuizMarkdown(markdownText);
-
         // marked.js 라이브러리를 통해 Markdown을 HTML로 파싱
         if (window.marked && typeof window.marked.parse === "function") {
-            quizResult.innerHTML = window.marked.parse(formattedMarkdown);
-            beautifyQuizPassages(quizResult);
-            beautifyQuizOptions(quizResult);
-            beautifyQuizExplanations(quizResult);
+            quizResult.innerHTML = window.marked.parse(markdownText);
         } else {
             // fallback: 일반 텍스트 보존 표시
             quizResult.innerHTML = `<pre style="white-space: pre-wrap;">${escapeHtml(markdownText)}</pre>`;
@@ -642,9 +256,9 @@ document.addEventListener("DOMContentLoaded", () => {
         quizResult.classList.remove("hidden");
         resultActions.style.display = "flex";
 
-        // 모바일 사용자를 위해 결과창으로 부드럽게 스크롤 (화면 레이아웃 변경 방지)
+        // 모바일 사용자를 위해 결과창으로 부드럽게 스크롤
         if (window.innerWidth <= 900) {
-            document.getElementById("result-section").scrollIntoView({ behavior: "smooth", block: "start" });
+            document.getElementById("result-section").scrollIntoView({ behavior: "smooth" });
         }
     }
 
@@ -685,7 +299,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // -------------------------------------------------------------------------
-    // 4. 결과 복사, 정답·해설 복사 및 Markdown 다운로드 기능
+    // 4. 결과 복사 및 Markdown 다운로드 기능
     // -------------------------------------------------------------------------
     copyBtn.addEventListener("click", async () => {
         if (!currentMarkdownText) return;
@@ -693,7 +307,7 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             await navigator.clipboard.writeText(currentMarkdownText);
             const originalText = copyBtn.innerHTML;
-            copyBtn.innerHTML = "✅ 결과 복사 완료!";
+            copyBtn.innerHTML = "✅ 복사 완료!";
             copyBtn.disabled = true;
 
             setTimeout(() => {
@@ -706,43 +320,13 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    if (copyAnswersBtn) {
-        copyAnswersBtn.addEventListener("click", async () => {
-            if (!currentMarkdownText) return;
-
-            const answersOnlyText = extractAnswersOnly(currentMarkdownText);
-            if (!answersOnlyText) {
-                alert("정답 및 해설 내용을 추출하지 못했습니다.");
-                return;
-            }
-
-            try {
-                await navigator.clipboard.writeText(answersOnlyText);
-                const originalText = copyAnswersBtn.innerHTML;
-                copyAnswersBtn.innerHTML = "✅ 정답·해설 복사 완료!";
-                copyAnswersBtn.disabled = true;
-
-                setTimeout(() => {
-                    copyAnswersBtn.innerHTML = originalText;
-                    copyAnswersBtn.disabled = false;
-                }, 2000);
-            } catch (err) {
-                console.error("정답/해설 복사 실패:", err);
-                alert("클립보드 복사에 실패했습니다. 권한을 확인해 주세요.");
-            }
-        });
-    }
-
     downloadPdfBtn.addEventListener("click", async () => {
         if (!currentMarkdownText) return;
 
-        const formattedMarkdown = formatQuizMarkdown(currentMarkdownText);
         // 원본 Markdown을 파싱하여 임시 DOM 객체 생성
         const tempDiv = document.createElement("div");
         if (window.marked && typeof window.marked.parse === "function") {
-            tempDiv.innerHTML = window.marked.parse(formattedMarkdown);
-            beautifyQuizPassages(tempDiv);
-            beautifyQuizOptions(tempDiv);
+            tempDiv.innerHTML = window.marked.parse(currentMarkdownText);
         } else {
             tempDiv.innerHTML = `<p>${escapeHtml(currentMarkdownText)}</p>`;
         }
